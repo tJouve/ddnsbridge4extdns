@@ -3,7 +3,7 @@
 ## Running Locally
 
 ### Prerequisites
-- Go 1.21+
+- Go 1.24+
 - kubectl configured with access to a Kubernetes cluster
 - ExternalDNS installed in the cluster
 

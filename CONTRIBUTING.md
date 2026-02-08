@@ -6,7 +6,7 @@ Thank you for your interest in contributing to ddnstoextdns! This document provi
 
 ### Prerequisites
 
-- Go 1.21 or later
+- Go 1.24 or later
 - Docker (for building containers)
 - kubectl (for Kubernetes deployment)
 - Access to a Kubernetes cluster (for testing)
