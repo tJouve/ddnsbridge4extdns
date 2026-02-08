@@ -17,7 +17,7 @@ func TestSanitizeResourceName(t *testing.T) {
 		{"subdomain.test.example.com", "subdomain-test-example-com"},
 		{"test_host.example.com", "test-host-example-com"},
 		{"123.example.com", "123-example-com"}, // starts with number - but we allow it
-		{"@", ""},                               // empty after sanitization
+		{"@", ""},                              // empty after sanitization
 	}
 
 	for _, tt := range tests {

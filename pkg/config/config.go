@@ -14,8 +14,8 @@ type Config struct {
 	Port       int
 
 	// TSIG settings
-	TSIGKey      string
-	TSIGSecret   string
+	TSIGKey       string
+	TSIGSecret    string
 	TSIGAlgorithm string
 
 	// Kubernetes settings

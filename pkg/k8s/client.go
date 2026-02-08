@@ -81,7 +81,7 @@ func (c *Client) createOrUpdateEndpoint(ctx context.Context, upd *update.DNSUpda
 				"namespace": c.namespace,
 				"labels": map[string]interface{}{
 					"app.kubernetes.io/managed-by": "ddnstoextdns",
-					"ddns-zone":                     sanitizeLabel(upd.Zone),
+					"ddns-zone":                    sanitizeLabel(upd.Zone),
 				},
 			},
 			"spec": map[string]interface{}{
@@ -160,17 +160,17 @@ func sanitizeResourceName(hostname string) string {
 	}
 	// Replace dots and other invalid characters with hyphens
 	name = dnsNameToK8sName(name)
-	
+
 	// Ensure it starts with alphanumeric
 	if len(name) > 0 && !isAlphanumeric(rune(name[0])) {
 		name = "dns-" + name
 	}
-	
+
 	// Truncate to 253 characters (Kubernetes limit)
 	if len(name) > 253 {
 		name = name[:253]
 	}
-	
+
 	return name
 }
 
@@ -181,12 +181,12 @@ func sanitizeLabel(zone string) string {
 		label = label[:len(label)-1]
 	}
 	label = dnsNameToK8sName(label)
-	
+
 	// Truncate to 63 characters (Kubernetes label limit)
 	if len(label) > 63 {
 		label = label[:63]
 	}
-	
+
 	return label
 }
 

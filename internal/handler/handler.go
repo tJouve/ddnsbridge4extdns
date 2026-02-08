@@ -89,7 +89,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	// Apply updates to Kubernetes
 	for _, upd := range updates {
 		log.Printf("Processing update from %s: %s", w.RemoteAddr(), upd.String())
-		
+
 		if err := h.k8sClient.ApplyUpdate(upd); err != nil {
 			log.Printf("Failed to apply update to Kubernetes: %v", err)
 			msg.SetRcode(r, dns.RcodeServerFailure)
@@ -97,7 +97,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			w.WriteMsg(msg)
 			return
 		}
-		
+
 		log.Printf("Successfully applied update: %s", upd.String())
 	}
 
@@ -110,8 +110,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 // signResponse signs the response with TSIG
 func (h *Handler) signResponse(msg *dns.Msg, requestMAC string) {
 	msg.SetTsig(h.tsig.GetKeyName(), h.tsig.GetAlgorithmName(), 300, int64(msg.MsgHdr.Id))
-	
+
 	// The miekg/dns library will automatically sign when WriteMsg is called
 	// if the TSIG record is present
 }
-

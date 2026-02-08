@@ -44,7 +44,7 @@ func main() {
 
 	// Create DNS server for UDP and TCP
 	serverAddr := fmt.Sprintf("%s:%d", cfg.ListenAddr, cfg.Port)
-	
+
 	udpServer := &dns.Server{
 		Addr:    serverAddr,
 		Net:     "udp",

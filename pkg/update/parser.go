@@ -70,7 +70,7 @@ func (p *Parser) Parse(msg *dns.Msg) ([]*DNSUpdate, error) {
 // parseRR parses a single resource record from the update section
 func (p *Parser) parseRR(rr dns.RR, zone string) (*DNSUpdate, error) {
 	header := rr.Header()
-	
+
 	update := &DNSUpdate{
 		Name: header.Name,
 		Zone: zone,
@@ -83,12 +83,12 @@ func (p *Parser) parseRR(rr dns.RR, zone string) (*DNSUpdate, error) {
 		// Class ANY with TTL 0 means delete
 		update.Type = UpdateTypeDelete
 		update.RecordType = header.Rrtype
-		
+
 	case dns.ClassNONE:
 		// Class NONE means delete specific record
 		update.Type = UpdateTypeDelete
 		update.RecordType = header.Rrtype
-		
+
 	case dns.ClassINET:
 		// Class IN means add/update
 		if header.Ttl == 0 {
@@ -110,14 +110,14 @@ func (p *Parser) parseRR(rr dns.RR, zone string) (*DNSUpdate, error) {
 		} else if update.Type != UpdateTypeDelete {
 			return nil, fmt.Errorf("invalid A record")
 		}
-		
+
 	case dns.TypeAAAA:
 		if aaaa, ok := rr.(*dns.AAAA); ok {
 			update.IP = aaaa.AAAA
 		} else if update.Type != UpdateTypeDelete {
 			return nil, fmt.Errorf("invalid AAAA record")
 		}
-		
+
 	default:
 		// Skip other record types
 		return nil, nil
@@ -156,7 +156,7 @@ func (u *DNSUpdate) String() string {
 func (u *DNSUpdate) GetHostname() string {
 	name := strings.TrimSuffix(u.Name, ".")
 	zone := strings.TrimSuffix(u.Zone, ".")
-	
+
 	if strings.HasSuffix(name, "."+zone) {
 		return strings.TrimSuffix(name, "."+zone)
 	}

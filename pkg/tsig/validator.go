@@ -29,7 +29,7 @@ func (v *Validator) Validate(msg *dns.Msg, requestMAC string) error {
 	}
 
 	tsig := msg.IsTsig()
-	
+
 	// Check if the key name matches
 	if tsig.Hdr.Name != v.keyName+"." && tsig.Hdr.Name != v.keyName {
 		return fmt.Errorf("TSIG key name mismatch: expected %s, got %s", v.keyName, tsig.Hdr.Name)
@@ -57,7 +57,7 @@ func (v *Validator) Validate(msg *dns.Msg, requestMAC string) error {
 // Sign signs a DNS message with TSIG
 func (v *Validator) Sign(msg *dns.Msg, requestMAC string) (*dns.Msg, string, error) {
 	msg.SetTsig(v.keyName, v.getAlgorithmName(), 300, int64(msg.MsgHdr.Id))
-	
+
 	// Generate TSIG
 	buf, mac, err := dns.TsigGenerate(msg, v.secret, requestMAC, false)
 	if err != nil {
@@ -69,7 +69,7 @@ func (v *Validator) Sign(msg *dns.Msg, requestMAC string) (*dns.Msg, string, err
 	if err := signedMsg.Unpack(buf); err != nil {
 		return nil, "", fmt.Errorf("failed to unpack signed message: %w", err)
 	}
-	
+
 	return signedMsg, mac, nil
 }
 
