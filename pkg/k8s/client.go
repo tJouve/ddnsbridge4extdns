@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -209,9 +210,5 @@ func isAlphanumeric(r rune) bool {
 
 // isNotFoundError checks if an error is a not found error
 func isNotFoundError(err error) bool {
-	if err == nil {
-		return false
-	}
-	// Simple string check - in production, use apierrors.IsNotFound
-	return fmt.Sprintf("%v", err) == "not found"
+	return apierrors.IsNotFound(err)
 }
