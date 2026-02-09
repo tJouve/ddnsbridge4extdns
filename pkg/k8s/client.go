@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -57,12 +58,12 @@ func NewClient(namespace string, customLabels map[string]string) (*Client, error
 }
 
 // ApplyUpdate applies a DNS update to Kubernetes as a DNSEndpoint resource
-func (c *Client) ApplyUpdate(upd *update.DNSUpdate) error {
+func (c *Client) ApplyUpdate(client net.Addr, upd *update.DNSUpdate) error {
 	ctx := context.Background()
 
 	switch upd.Type {
 	case update.UpdateTypeCreate, update.UpdateTypeUpdate:
-		return c.createOrUpdateEndpoint(ctx, upd)
+		return c.createOrUpdateEndpoint(ctx, client, upd)
 	case update.UpdateTypeDelete:
 		return c.deleteEndpoint(ctx, upd)
 	default:
@@ -71,7 +72,7 @@ func (c *Client) ApplyUpdate(upd *update.DNSUpdate) error {
 }
 
 // createOrUpdateEndpoint creates or updates a DNSEndpoint resource
-func (c *Client) createOrUpdateEndpoint(ctx context.Context, upd *update.DNSUpdate) error {
+func (c *Client) createOrUpdateEndpoint(ctx context.Context, client net.Addr, upd *update.DNSUpdate) error {
 	hostname := upd.GetHostname()
 	resourceName := sanitizeResourceName(hostname)
 
@@ -83,7 +84,8 @@ func (c *Client) createOrUpdateEndpoint(ctx context.Context, upd *update.DNSUpda
 	// Build labels map with default labels
 	labels := map[string]interface{}{
 		"app.kubernetes.io/managed-by": "ddnsbridge4extdns",
-		"ddns-zone":                    sanitizeLabel(upd.Zone),
+		"ddnsbridge4extdns/zone":       sanitizeLabel(upd.Zone),
+		"ddnsbridge4extdns/ask-by":     sanitizeLabel(client.String()),
 	}
 
 	// Add custom labels (user-defined labels take precedence)

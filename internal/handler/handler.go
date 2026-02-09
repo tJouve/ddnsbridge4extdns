@@ -85,7 +85,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	for _, upd := range updates {
 		log.Printf("Processing update from %s: %s", w.RemoteAddr(), upd.String())
 
-		if err := h.k8sClient.ApplyUpdate(upd); err != nil {
+		if err := h.k8sClient.ApplyUpdate(w.RemoteAddr(), upd); err != nil {
 			log.Printf("Failed to apply update to Kubernetes: %v", err)
 			msg.SetRcode(r, dns.RcodeServerFailure)
 			h.writeResponse(w, msg, requestMAC)
