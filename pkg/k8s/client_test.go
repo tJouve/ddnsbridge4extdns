@@ -55,15 +55,15 @@ func TestSanitizeLabel(t *testing.T) {
 	}
 }
 
-func TestIsAlphanumeric(t *testing.T) {
+func TestIsAlphanumericLower(t *testing.T) {
 	tests := []struct {
 		input    rune
 		expected bool
 	}{
 		{'a', true},
 		{'z', true},
-		{'A', true},
-		{'Z', true},
+		{'A', false},
+		{'Z', false},
 		{'0', true},
 		{'9', true},
 		{'-', false},
@@ -74,9 +74,9 @@ func TestIsAlphanumeric(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.input), func(t *testing.T) {
-			result := isAlphanumeric(tt.input)
+			result := isAlphanumericLower(tt.input)
 			if result != tt.expected {
-				t.Errorf("isAlphanumeric(%c) = %v, want %v", tt.input, result, tt.expected)
+				t.Errorf("isAlphanumericLower(%c) = %v, want %v", tt.input, result, tt.expected)
 			}
 		})
 	}

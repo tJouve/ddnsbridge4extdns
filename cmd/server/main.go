@@ -12,7 +12,6 @@ import (
 	"github.com/tJouve/ddnsbridge4extdns/internal/handler"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/config"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/k8s"
-	"github.com/tJouve/ddnsbridge4extdns/pkg/tsig"
 )
 
 func main() {
@@ -42,10 +41,6 @@ func main() {
 	logrus.Debugf("TSIG key: %s, algorithm: %s", cfg.TSIGKey, cfg.TSIGAlgorithm)
 	logrus.Debugf("Kubernetes namespace: %s", cfg.Namespace)
 
-	// Initialize TSIG validator
-	tsigValidator := tsig.NewValidator(cfg.TSIGKey, cfg.TSIGSecret, cfg.TSIGAlgorithm)
-	logrus.Debugf("TSIG validator initialized")
-
 	// Initialize Kubernetes client
 	k8sClient, err := k8s.NewClient(cfg.Namespace, cfg.CustomLabels)
 	if err != nil {
@@ -57,7 +52,7 @@ func main() {
 	}
 
 	// Create DNS handler
-	dnsHandler := handler.NewHandler(cfg, tsigValidator, k8sClient)
+	dnsHandler := handler.NewHandler(cfg, k8sClient)
 
 	// Create DNS server for UDP and TCP
 	// Set TsigSecret on the server - this is required for TSIG to work properly
@@ -69,6 +64,7 @@ func main() {
 		cfg.TSIGKey:       cfg.TSIGSecret,
 		cfg.TSIGKey + ".": cfg.TSIGSecret,
 	}
+	logrus.Debugf("TSIG secrets configured for keys: %s, %s.", cfg.TSIGKey, cfg.TSIGKey)
 
 	// Custom MsgAcceptFunc: accept queries, notifies and UPDATE opcodes; ignore responses; reject others
 	msgAccept := func(dh dns.Header) dns.MsgAcceptAction {

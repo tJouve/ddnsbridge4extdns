@@ -2,11 +2,11 @@ package update
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"strings"
 
 	"github.com/miekg/dns"
+	"github.com/sirupsen/logrus"
 )
 
 // UpdateType represents the type of DNS update operation
@@ -149,11 +149,11 @@ func (u *DNSUpdate) String() string {
 
 	if u.IP != nil {
 		msg := fmt.Sprintf("%s %s %s -> %s (TTL: %d)", typeStr, recordTypeStr, u.Name, u.IP.String(), u.TTL)
-		log.Printf("Parsed DNS update: %s", msg)
+		logrus.Debugf("Parsed DNS update: %s", msg)
 		return msg
 	}
 	msg := fmt.Sprintf("%s %s %s", typeStr, recordTypeStr, u.Name)
-	log.Printf("Parsed DNS update: %s", msg)
+	logrus.Debugf("Parsed DNS update: %s", msg)
 	return msg
 }
 

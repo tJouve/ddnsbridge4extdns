@@ -5,23 +5,20 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/config"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/k8s"
-	"github.com/tJouve/ddnsbridge4extdns/pkg/tsig"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/update"
 )
 
 // Handler handles DNS UPDATE requests
 type Handler struct {
 	config    *config.Config
-	tsig      *tsig.Validator
 	k8sClient *k8s.Client
 	parser    *update.Parser
 }
 
 // NewHandler creates a new DNS UPDATE handler
-func NewHandler(cfg *config.Config, tsigValidator *tsig.Validator, k8sClient *k8s.Client) *Handler {
+func NewHandler(cfg *config.Config, k8sClient *k8s.Client) *Handler {
 	return &Handler{
 		config:    cfg,
-		tsig:      tsigValidator,
 		k8sClient: k8sClient,
 		parser:    update.NewParser(),
 	}
@@ -29,8 +26,15 @@ func NewHandler(cfg *config.Config, tsigValidator *tsig.Validator, k8sClient *k8
 
 // ServeDNS implements the dns.Handler interface
 func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+	tsigPresent := r.IsTsig() != nil
 	logrus.Debugf("Received message from %s: opcode=%d, hasQuestion=%d, hasTSIG=%v",
-		w.RemoteAddr(), r.Opcode, len(r.Question), r.IsTsig() != nil)
+		w.RemoteAddr(), r.Opcode, len(r.Question), tsigPresent)
+	// If TSIG is present, log its details
+	if tsigPresent {
+		tsig := r.IsTsig()
+		logrus.Debugf("TSIG details: keyName=%s, algorithm=%s, timeSigned=%d, fudge=%d",
+			tsig.Hdr.Name, tsig.Algorithm, tsig.TimeSigned, tsig.Fudge)
+	}
 
 	msg := new(dns.Msg)
 	msg.SetReply(r)
@@ -44,15 +48,20 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
-	// Note: TSIG validation is handled automatically by the server when TsigSecret is set
-	// If the request reaches this handler, TSIG has already been validated (if present)
-
-	// Get the request MAC for response signing (if TSIG was present)
-	requestMAC := ""
-	if t := r.IsTsig(); t != nil {
-		requestMAC = t.MAC
-		logrus.Debugf("Request has TSIG from key: %s", t.Hdr.Name)
+	// Enforce TSIG presence - the DNS server handles automatic verification when TsigSecret is set
+	// If the request reaches here with TSIG, it has already been verified by the server
+	// We just need to ensure TSIG is present (reject requests without TSIG)
+	tsigRecord := r.IsTsig()
+	if tsigRecord == nil {
+		logrus.Warnf("Rejected UPDATE request without TSIG from %s", w.RemoteAddr())
+		msg.SetRcode(r, dns.RcodeRefused)
+		w.WriteMsg(msg)
+		return
 	}
+
+	// TSIG is present and was already verified by the DNS server
+	requestMAC := tsigRecord.MAC
+	logrus.Debugf("Request authenticated with TSIG from key: %s", tsigRecord.Hdr.Name)
 
 	// Validate zone
 	if len(r.Question) == 0 {
@@ -81,16 +90,17 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	// Apply updates to Kubernetes
 	for _, upd := range updates {
-		logrus.Infof("Processing update from %s: %s", w.RemoteAddr(), upd.String())
-
-		if err := h.k8sClient.ApplyUpdate(w.RemoteAddr(), upd); err != nil {
+		logrus.Debugf("Processing update from %s: %s", w.RemoteAddr(), upd.String())
+		updated, err := h.k8sClient.ApplyUpdate(w.RemoteAddr(), upd)
+		if err != nil {
 			logrus.Errorf("Failed to apply update to Kubernetes: %v", err)
 			msg.SetRcode(r, dns.RcodeServerFailure)
 			h.writeResponse(w, msg, requestMAC)
 			return
 		}
-
-		logrus.Infof("Successfully applied update: %s", upd.String())
+		if updated {
+			logrus.Infof("Successfully applied update: %s", upd.String())
+		}
 	}
 
 	// Success response
@@ -108,9 +118,17 @@ func (h *Handler) writeResponse(w dns.ResponseWriter, msg *dns.Msg, requestMAC s
 		if keyName[len(keyName)-1] != '.' {
 			keyName = keyName + "."
 		}
-
-		// Get the algorithm in FQDN format
-		algorithm := h.tsig.GetAlgorithmName()
+		algorithm := dns.HmacSHA256
+		switch h.config.TSIGAlgorithm {
+		case "hmac-sha1":
+			algorithm = dns.HmacSHA1
+		case "hmac-sha256":
+			algorithm = dns.HmacSHA256
+		case "hmac-sha512":
+			algorithm = dns.HmacSHA512
+		case "hmac-md5":
+			algorithm = dns.HmacMD5
+		}
 
 		// Set TSIG parameters on the message
 		msg.SetTsig(keyName, algorithm, 300, 0)

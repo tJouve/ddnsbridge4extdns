@@ -2,9 +2,10 @@ package k8s
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"log"
 	"net"
+	"reflect"
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/sirupsen/logrus"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/update"
 )
 
@@ -58,21 +60,21 @@ func NewClient(namespace string, customLabels map[string]string) (*Client, error
 }
 
 // ApplyUpdate applies a DNS update to Kubernetes as a DNSEndpoint resource
-func (c *Client) ApplyUpdate(client net.Addr, upd *update.DNSUpdate) error {
+func (c *Client) ApplyUpdate(client net.Addr, upd *update.DNSUpdate) (changed bool, err error) {
 	ctx := context.Background()
 
 	switch upd.Type {
 	case update.UpdateTypeCreate, update.UpdateTypeUpdate:
 		return c.createOrUpdateEndpoint(ctx, client, upd)
 	case update.UpdateTypeDelete:
-		return c.deleteEndpoint(ctx, upd)
+		return true, c.deleteEndpoint(ctx, upd)
 	default:
-		return fmt.Errorf("unsupported update type: %v", upd.Type)
+		return false, fmt.Errorf("unsupported update type: %v", upd.Type)
 	}
 }
 
 // createOrUpdateEndpoint creates or updates a DNSEndpoint resource
-func (c *Client) createOrUpdateEndpoint(ctx context.Context, client net.Addr, upd *update.DNSUpdate) error {
+func (c *Client) createOrUpdateEndpoint(ctx context.Context, client net.Addr, upd *update.DNSUpdate) (changed bool, err error) {
 	hostname := upd.GetHostname()
 	resourceName := sanitizeResourceName(hostname)
 
@@ -85,7 +87,7 @@ func (c *Client) createOrUpdateEndpoint(ctx context.Context, client net.Addr, up
 	labels := map[string]interface{}{
 		"app.kubernetes.io/managed-by": "ddnsbridge4extdns",
 		"ddnsbridge4extdns/zone":       sanitizeLabel(upd.Zone),
-		"ddnsbridge4extdns/ask-by":     sanitizeLabel(client.String()),
+		"ddnsbridge4extdns/ask-by":     sanitizeLabel(strings.Split(client.String(), ":")[0]),
 	}
 
 	// Add custom labels (user-defined labels take precedence)
@@ -120,24 +122,33 @@ func (c *Client) createOrUpdateEndpoint(ctx context.Context, client net.Addr, up
 	// Try to get existing resource
 	existing, err := c.dynamicClient.Resource(c.gvr).Namespace(c.namespace).Get(ctx, resourceName, metav1.GetOptions{})
 	if err == nil {
-		// Update existing resource
+		labelsMatch, specMatch, existingStr, desiredStr := compareEndpoint(existing, endpoint)
+		if labelsMatch && specMatch {
+			logrus.Debugf("DNSEndpoint already exists, skipping update: %s/%s", c.namespace, resourceName)
+			return false, nil
+		}
+
+		logrus.Debugf("DNSEndpoint differs; updating %s/%s\nExisting: %s\nDesired:  %s", c.namespace, resourceName, existingStr, desiredStr)
 		endpoint.SetResourceVersion(existing.GetResourceVersion())
 		_, err = c.dynamicClient.Resource(c.gvr).Namespace(c.namespace).Update(ctx, endpoint, metav1.UpdateOptions{})
 		if err != nil {
-			return fmt.Errorf("failed to update DNSEndpoint: %w", err)
+			return false, fmt.Errorf("failed to update DNSEndpoint: %w", err)
 		}
-		log.Printf("Successfully updated DNSEndpoint %s/%s", c.namespace, resourceName)
-		return nil
+		logrus.Debugf("Successfully updated DNSEndpoint %s/%s", c.namespace, resourceName)
+		return true, nil
+	}
+	if !isNotFoundError(err) {
+		return false, fmt.Errorf("failed to get DNSEndpoint: %w", err)
 	}
 
 	// Create new resource
 	_, err = c.dynamicClient.Resource(c.gvr).Namespace(c.namespace).Create(ctx, endpoint, metav1.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to create DNSEndpoint: %w", err)
+		return false, fmt.Errorf("failed to create DNSEndpoint: %w", err)
 	}
-	log.Printf("Successfully created DNSEndpoint %s/%s", c.namespace, resourceName)
+	logrus.Infof("Successfully created DNSEndpoint %s/%s", c.namespace, resourceName)
 
-	return nil
+	return true, nil
 }
 
 // deleteEndpoint deletes a DNSEndpoint resource
@@ -152,7 +163,7 @@ func (c *Client) deleteEndpoint(ctx context.Context, upd *update.DNSUpdate) erro
 			return fmt.Errorf("failed to delete DNSEndpoint: %w", err)
 		}
 	} else {
-		log.Printf("Successfully deleted DNSEndpoint %s/%s", c.namespace, resourceName)
+		logrus.Infof("Successfully deleted DNSEndpoint %s/%s", c.namespace, resourceName)
 	}
 
 	return nil
@@ -190,7 +201,7 @@ func sanitizeResourceName(hostname string) string {
 	name = dnsNameToK8sName(name)
 
 	// Ensure it starts with alphanumeric
-	if len(name) > 0 && !isAlphanumeric(rune(name[0])) {
+	if len(name) > 0 && !isAlphanumericLower(rune(name[0])) {
 		name = "dns-" + name
 	}
 
@@ -223,7 +234,7 @@ func dnsNameToK8sName(name string) string {
 	name = strings.ToLower(name)
 	result := make([]rune, 0, len(name))
 	for _, r := range name {
-		if isAlphanumeric(r) || r == '-' {
+		if isAlphanumericLower(r) || r == '-' {
 			result = append(result, r)
 		} else if r == '.' || r == '_' || r == ':' {
 			result = append(result, '-')
@@ -232,12 +243,57 @@ func dnsNameToK8sName(name string) string {
 	return string(result)
 }
 
-// isAlphanumeric checks if a rune is alphanumeric
-func isAlphanumeric(r rune) bool {
+// isAlphanumericLower checks if a rune is alphanumeric
+func isAlphanumericLower(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
 }
 
 // isNotFoundError checks if an error is a not found error
 func isNotFoundError(err error) bool {
 	return apierrors.IsNotFound(err)
+}
+
+func compareEndpoint(existing, desired *unstructured.Unstructured) (bool, bool, string, string) {
+	existingLabels := getLabels(existing)
+	desiredLabels := getLabels(desired)
+	labelsMatch := reflect.DeepEqual(existingLabels, desiredLabels)
+
+	existingSpec := getSpec(existing)
+	desiredSpec := getSpec(desired)
+	specMatch := reflect.DeepEqual(existingSpec, desiredSpec)
+
+	existingDetail := map[string]interface{}{
+		"labels": existingLabels,
+		"spec":   existingSpec,
+	}
+	desiredDetail := map[string]interface{}{
+		"labels": desiredLabels,
+		"spec":   desiredSpec,
+	}
+	return labelsMatch, specMatch, jsonSummary(existingDetail), jsonSummary(desiredDetail)
+}
+
+func getLabels(u *unstructured.Unstructured) map[string]interface{} {
+	metadata, _ := u.Object["metadata"].(map[string]interface{})
+	labels, _ := metadata["labels"].(map[string]interface{})
+	if labels == nil {
+		return map[string]interface{}{}
+	}
+	return labels
+}
+
+func getSpec(u *unstructured.Unstructured) map[string]interface{} {
+	spec, _ := u.Object["spec"].(map[string]interface{})
+	if spec == nil {
+		return map[string]interface{}{}
+	}
+	return spec
+}
+
+func jsonSummary(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf("failed to marshal diff: %v", err)
+	}
+	return string(b)
 }
