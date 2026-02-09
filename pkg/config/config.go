@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -49,13 +48,6 @@ func LoadConfig() (*Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
-
-	// Log TSIG key information
-	log.Printf("TSIG Configuration:")
-	log.Printf("  Key Name: %s", cfg.TSIGKey)
-	log.Printf("  Key Secret : %s", cfg.TSIGSecret)
-	log.Printf("  Key Algorithm: %s", cfg.TSIGAlgorithm)
-
 	return cfg, nil
 }
 
@@ -105,15 +97,6 @@ func getEnvInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
-		}
-	}
-	return defaultValue
-}
-
-func getEnvBool(key string, defaultValue bool) bool {
-	if value := os.Getenv(key); value != "" {
-		if boolValue, err := strconv.ParseBool(value); err == nil {
-			return boolValue
 		}
 	}
 	return defaultValue

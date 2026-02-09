@@ -257,12 +257,35 @@ kubectl logs -n ddnsbridge4extdns -l app=ddnsbridge4extdns -f
 
 ### Debug Mode
 
-Enable more verbose logging:
+Enable more verbose logging by setting the `LOG_LEVEL` environment variable:
+
+```bash
+# Local testing
+export LOG_LEVEL=debug
+go run ./cmd/server
+
+# Or set TRACE for maximum verbosity
+export LOG_LEVEL=trace
+go run ./cmd/server
+
+# Or set ERROR for minimal logging
+export LOG_LEVEL=error
+go run ./cmd/server
+```
+
+In Kubernetes:
 
 ```yaml
 data:
-  LOG_LEVEL: "debug"
+  LOG_LEVEL: "debug"  # or trace, info, warn, error
 ```
+
+**Log Levels:**
+- `TRACE` - Maximum verbosity; logs all operations
+- `DEBUG` - Useful for troubleshooting; logs detailed information
+- `INFO` - Standard level; logs important events (default)
+- `WARN` - Logs warnings and errors only
+- `ERROR` - Logs errors only
 
 ## Security Best Practices
 

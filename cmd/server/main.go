@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/miekg/dns"
+	"github.com/sirupsen/logrus"
 	"github.com/tJouve/ddnsbridge4extdns/internal/handler"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/config"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/k8s"
@@ -15,31 +16,44 @@ import (
 )
 
 func main() {
-	log.Println("Starting ddnsbridge4extdns - RFC2136 DNS UPDATE server for Kubernetes ExternalDNS")
-
-	// Load configuration
+	// Load configuration first
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logrus.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	log.Printf("Configuration loaded: listening on %s:%d", cfg.ListenAddr, cfg.Port)
-	log.Printf("Allowed zones: %v", cfg.AllowedZones)
-	log.Printf("TSIG key: %s, algorithm: %s", cfg.TSIGKey, cfg.TSIGAlgorithm)
-	log.Printf("Kubernetes namespace: %s", cfg.Namespace)
+	// Initialize logrus with configured log level
+	level, err := logrus.ParseLevel(strings.ToLower(cfg.LogLevel))
+	if err != nil {
+		level = logrus.InfoLevel
+	}
+	logrus.SetLevel(level)
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02 15:04:05",
+		ForceColors:     true,
+	})
+
+	logrus.Println("Starting ddnsbridge4extdns - RFC2136 DNS UPDATE server for Kubernetes ExternalDNS")
+	logrus.Infof("Log level set to: %s", level.String())
+
+	logrus.Infof("Configuration loaded: listening on %s:%d", cfg.ListenAddr, cfg.Port)
+	logrus.Debugf("Allowed zones: %v", cfg.AllowedZones)
+	logrus.Debugf("TSIG key: %s, algorithm: %s", cfg.TSIGKey, cfg.TSIGAlgorithm)
+	logrus.Debugf("Kubernetes namespace: %s", cfg.Namespace)
 
 	// Initialize TSIG validator
 	tsigValidator := tsig.NewValidator(cfg.TSIGKey, cfg.TSIGSecret, cfg.TSIGAlgorithm)
-	log.Println("TSIG validator initialized")
+	logrus.Debugf("TSIG validator initialized")
 
 	// Initialize Kubernetes client
 	k8sClient, err := k8s.NewClient(cfg.Namespace, cfg.CustomLabels)
 	if err != nil {
-		log.Fatalf("Failed to initialize Kubernetes client: %v", err)
+		logrus.Fatalf("Failed to initialize Kubernetes client: %v", err)
 	}
-	log.Println("Kubernetes client initialized")
+	logrus.Debugf("Kubernetes client initialized")
 	if len(cfg.CustomLabels) > 0 {
-		log.Printf("Custom labels configured: %v", cfg.CustomLabels)
+		logrus.Debugf("Custom labels configured: %v", cfg.CustomLabels)
 	}
 
 	// Create DNS handler
@@ -87,29 +101,29 @@ func main() {
 
 	// Start UDP server
 	go func() {
-		log.Printf("Starting UDP server on %s", serverAddr)
+		logrus.Infof("Starting UDP server on %s", serverAddr)
 		if err := udpServer.ListenAndServe(); err != nil {
-			log.Fatalf("Failed to start UDP server: %v", err)
+			logrus.Fatalf("Failed to start UDP server: %v", err)
 		}
 	}()
 
 	// Start TCP server
 	go func() {
-		log.Printf("Starting TCP server on %s", serverAddr)
+		logrus.Infof("Starting TCP server on %s", serverAddr)
 		if err := tcpServer.ListenAndServe(); err != nil {
-			log.Fatalf("Failed to start TCP server: %v", err)
+			logrus.Fatalf("Failed to start TCP server: %v", err)
 		}
 	}()
 
-	log.Println("DNS UPDATE server started successfully")
+	logrus.Println("DNS UPDATE server started successfully")
 
 	// Wait for interrupt signal
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 
-	log.Println("Shutting down servers...")
+	logrus.Println("Shutting down servers...")
 	udpServer.Shutdown()
 	tcpServer.Shutdown()
-	log.Println("Servers stopped")
+	logrus.Println("Servers stopped")
 }

@@ -105,14 +105,21 @@ Configuration is done via environment variables:
 | `NAMESPACE` | Target Kubernetes namespace for DNSEndpoints | `default` | No |
 | `ALLOWED_ZONES` | Comma-separated list of allowed zones | - | **Yes** |
 | `CUSTOM_LABELS` | Custom labels for DNSEndpoint resources (format: `key1=value1,key2=value2`) | - | No |
-| `LOG_LEVEL` | Log level | `info` | No |
+| `LOG_LEVEL` | Log level (TRACE, DEBUG, INFO, WARN, ERROR) | `INFO` | No |
+
+### Supported Log Levels
+
+- `TRACE` - Most verbose; logs all internal operations (values, computations, flow)
+- `DEBUG` - Debug information; useful for troubleshooting (TSIG details, zone checks)
+- `INFO` - Standard logging level; logs important events (DNS updates received, processed)
+- `WARN` - Warning level; logs potentially problematic situations (rejected requests, zone mismatches)
+- `ERROR` - Error level; logs errors only (failures, exceptions)
 
 ### Supported TSIG Algorithms
 
 - `hmac-sha256` (recommended)
 - `hmac-sha512`
 - `hmac-sha1`
-- `hmac-md5`
 
 ## OPNsense Configuration
 

@@ -1,9 +1,8 @@
 package handler
 
 import (
-	"log"
-
 	"github.com/miekg/dns"
+	"github.com/sirupsen/logrus"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/config"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/k8s"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/tsig"
@@ -30,8 +29,7 @@ func NewHandler(cfg *config.Config, tsigValidator *tsig.Validator, k8sClient *k8
 
 // ServeDNS implements the dns.Handler interface
 func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
-	log.Printf("=== ServeDNS CALLED === from %s", w.RemoteAddr())
-	log.Printf("Received message from %s: opcode=%d, hasQuestion=%d, hasTSIG=%v",
+	logrus.Debugf("Received message from %s: opcode=%d, hasQuestion=%d, hasTSIG=%v",
 		w.RemoteAddr(), r.Opcode, len(r.Question), r.IsTsig() != nil)
 
 	msg := new(dns.Msg)
@@ -40,7 +38,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	// Only process UPDATE opcodes
 	if r.Opcode != dns.OpcodeUpdate {
-		log.Printf("Rejected non-UPDATE request (opcode: %d) from %s", r.Opcode, w.RemoteAddr())
+		logrus.Warnf("Rejected non-UPDATE request (opcode: %d) from %s", r.Opcode, w.RemoteAddr())
 		msg.SetRcode(r, dns.RcodeNotImplemented)
 		w.WriteMsg(msg)
 		return
@@ -53,12 +51,12 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	requestMAC := ""
 	if t := r.IsTsig(); t != nil {
 		requestMAC = t.MAC
-		log.Printf("Request has TSIG from key: %s", t.Hdr.Name)
+		logrus.Debugf("Request has TSIG from key: %s", t.Hdr.Name)
 	}
 
 	// Validate zone
 	if len(r.Question) == 0 {
-		log.Printf("UPDATE message has no zone section from %s", w.RemoteAddr())
+		logrus.Warnf("UPDATE message has no zone section from %s", w.RemoteAddr())
 		msg.SetRcode(r, dns.RcodeFormatError)
 		h.writeResponse(w, msg, requestMAC)
 		return
@@ -66,7 +64,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	zone := r.Question[0].Name
 	if !h.config.IsZoneAllowed(zone) {
-		log.Printf("Zone %s not allowed from %s", zone, w.RemoteAddr())
+		logrus.Warnf("Zone %s not allowed from %s", zone, w.RemoteAddr())
 		msg.SetRcode(r, dns.RcodeRefused)
 		h.writeResponse(w, msg, requestMAC)
 		return
@@ -75,7 +73,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	// Parse updates
 	updates, err := h.parser.Parse(r)
 	if err != nil {
-		log.Printf("Failed to parse UPDATE from %s: %v", w.RemoteAddr(), err)
+		logrus.Errorf("Failed to parse UPDATE from %s: %v", w.RemoteAddr(), err)
 		msg.SetRcode(r, dns.RcodeFormatError)
 		h.writeResponse(w, msg, requestMAC)
 		return
@@ -83,16 +81,16 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	// Apply updates to Kubernetes
 	for _, upd := range updates {
-		log.Printf("Processing update from %s: %s", w.RemoteAddr(), upd.String())
+		logrus.Infof("Processing update from %s: %s", w.RemoteAddr(), upd.String())
 
 		if err := h.k8sClient.ApplyUpdate(w.RemoteAddr(), upd); err != nil {
-			log.Printf("Failed to apply update to Kubernetes: %v", err)
+			logrus.Errorf("Failed to apply update to Kubernetes: %v", err)
 			msg.SetRcode(r, dns.RcodeServerFailure)
 			h.writeResponse(w, msg, requestMAC)
 			return
 		}
 
-		log.Printf("Successfully applied update: %s", upd.String())
+		logrus.Infof("Successfully applied update: %s", upd.String())
 	}
 
 	// Success response
@@ -121,7 +119,7 @@ func (h *Handler) writeResponse(w dns.ResponseWriter, msg *dns.Msg, requestMAC s
 		// dns.TsigGenerate returns the packed signed message
 		buf, _, err := dns.TsigGenerate(msg, h.config.TSIGSecret, requestMAC, false)
 		if err != nil {
-			log.Printf("Failed to generate TSIG for response: %v", err)
+			logrus.Errorf("Failed to generate TSIG for response: %v", err)
 			w.WriteMsg(msg)
 			return
 		}
