@@ -12,7 +12,7 @@ resources:
 
 commonAnnotations:
   app.kubernetes.io/description: RFC2136 DNS UPDATE Bridge for Kubernetes ExternalDNS
-  app.kubernetes.io/version: &version v0.1.6
+  app.kubernetes.io/version: &version v0.1.7
 
 images:
 - name: ddnsbridge4extdns

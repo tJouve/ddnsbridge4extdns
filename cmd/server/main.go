@@ -33,11 +33,14 @@ func main() {
 	log.Println("TSIG validator initialized")
 
 	// Initialize Kubernetes client
-	k8sClient, err := k8s.NewClient(cfg.Namespace)
+	k8sClient, err := k8s.NewClient(cfg.Namespace, cfg.CustomLabels)
 	if err != nil {
 		log.Fatalf("Failed to initialize Kubernetes client: %v", err)
 	}
 	log.Println("Kubernetes client initialized")
+	if len(cfg.CustomLabels) > 0 {
+		log.Printf("Custom labels configured: %v", cfg.CustomLabels)
+	}
 
 	// Create DNS handler
 	dnsHandler := handler.NewHandler(cfg, tsigValidator, k8sClient)

@@ -10,9 +10,10 @@ metadata:
 type: Opaque
 stringData:
   # IMPORTANT: Replace these values with your own TSIG key and secret
-  # Generate a secret with: echo -n "your-secret" | base64
+  # Generate a secret with: tsig-keygen -a hmac-sha256 opnsense_register
   tsig-key: "opnsense_register"
-  tsig-secret: "NDybxELWemcUGCt8N0Qqnursx+iSzURDiS+S9q8YGeyuj1y/u5Ipm8GayuU0N9o2WoIQwcTmcSlXrCMI2KVsgA=="
+  tsig-secret: "MzXHlvBdxhFUQUC0OAU0uGC+2nV+mMz+DtURYkmMiL0="
+  tsig-algorithm: "hmac-sha256"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -21,10 +22,12 @@ metadata:
 data:
   LISTEN_ADDR: "0.0.0.0"
   PORT: "5353"
-  TSIG_ALGORITHM: "hmac-sha256"
   DNS_ENDPOINT_CRD: "true"
-  ALLOWED_ZONES: "example.com,example.org"
+  ALLOWED_ZONES: "smokingcat.net"
   LOG_LEVEL: "info"
+  # Optional: Add custom labels to DNSEndpoint resources
+  # Format: key1=value1,key2=value2
+  # Example: CUSTOM_LABELS: "environment=production,team=infrastructure"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -52,6 +55,11 @@ spec:
             secretKeyRef:
               name: ddns-tsig
               key: tsig-key
+        - name: TSIG_ALGORITHM
+          valueFrom:
+            secretKeyRef:
+              name: ddns-tsig
+              key: tsig-algorithm
         - name: TSIG_SECRET
           valueFrom:
             secretKeyRef:

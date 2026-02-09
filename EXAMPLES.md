@@ -15,6 +15,9 @@ export TSIG_SECRET="bXktc2VjcmV0LWtleQ=="  # Base64-encoded secret
 export ALLOWED_ZONES="example.com,home.example.com"
 export NAMESPACE="default"
 export PORT="5353"  # Use non-privileged port for local testing
+
+# Optional: Add custom labels to DNSEndpoint resources
+export CUSTOM_LABELS="environment=production,team=infrastructure,managed-by=opnsense"
 ```
 
 ### Generate TSIG Secret
@@ -80,6 +83,65 @@ EOF
 kubectl get dnsendpoint -n default
 kubectl get dnsendpoint router-example-com -n default -o yaml
 ```
+
+## Using Custom Labels
+
+You can add custom labels to the DNSEndpoint resources created by ddnsbridge4extdns. This is useful for organizing resources, applying policies, or integrating with other tools.
+
+### Setting Custom Labels
+
+Set the `CUSTOM_LABELS` environment variable with comma-separated key=value pairs:
+
+```bash
+export CUSTOM_LABELS="environment=production,team=infrastructure,cost-center=it"
+```
+
+Or in Kubernetes ConfigMap:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ddns-config
+data:
+  CUSTOM_LABELS: "environment=production,team=infrastructure,cost-center=it"
+```
+
+### Example DNSEndpoint with Custom Labels
+
+When you create a DNS record, the resulting DNSEndpoint will include both default and custom labels:
+
+```yaml
+apiVersion: externaldns.k8s.io/v1alpha1
+kind: DNSEndpoint
+metadata:
+  name: router-example-com
+  namespace: default
+  labels:
+    # Default labels
+    app.kubernetes.io/managed-by: ddnsbridge4extdns
+    ddns-zone: example-com
+    # Custom labels (from CUSTOM_LABELS)
+    environment: production
+    team: infrastructure
+    cost-center: it
+spec:
+  endpoints:
+  - dnsName: router.example.com
+    recordType: A
+    recordTTL: 300
+    targets:
+    - 192.168.1.1
+```
+
+### Use Cases for Custom Labels
+
+1. **Environment Segregation**: Label records by environment (dev, staging, production)
+2. **Team Ownership**: Track which team owns specific DNS records
+3. **Cost Allocation**: Associate DNS records with cost centers for billing
+4. **Policy Enforcement**: Use labels with Kubernetes admission controllers or policy engines
+5. **Monitoring**: Filter and group DNS records in monitoring dashboards
+6. **Cleanup**: Easily identify and delete groups of related resources
 
 ## OPNsense Configuration
 

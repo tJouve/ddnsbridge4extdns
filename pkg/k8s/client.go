@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,10 +22,11 @@ type Client struct {
 	dynamicClient dynamic.Interface
 	namespace     string
 	gvr           schema.GroupVersionResource
+	customLabels  map[string]string
 }
 
 // NewClient creates a new Kubernetes client
-func NewClient(namespace string) (*Client, error) {
+func NewClient(namespace string, customLabels map[string]string) (*Client, error) {
 	config, err := getKubeConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
@@ -42,10 +44,15 @@ func NewClient(namespace string) (*Client, error) {
 		Resource: "dnsendpoints",
 	}
 
+	if customLabels == nil {
+		customLabels = map[string]string{}
+	}
+
 	return &Client{
 		dynamicClient: dynamicClient,
 		namespace:     namespace,
 		gvr:           gvr,
+		customLabels:  customLabels,
 	}, nil
 }
 
@@ -73,6 +80,17 @@ func (c *Client) createOrUpdateEndpoint(ctx context.Context, upd *update.DNSUpda
 		recordType = "AAAA"
 	}
 
+	// Build labels map with default labels
+	labels := map[string]interface{}{
+		"app.kubernetes.io/managed-by": "ddnsbridge4extdns",
+		"ddns-zone":                    sanitizeLabel(upd.Zone),
+	}
+
+	// Add custom labels (user-defined labels take precedence)
+	for k, v := range c.customLabels {
+		labels[k] = v
+	}
+
 	endpoint := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "externaldns.k8s.io/v1alpha1",
@@ -80,10 +98,7 @@ func (c *Client) createOrUpdateEndpoint(ctx context.Context, upd *update.DNSUpda
 			"metadata": map[string]interface{}{
 				"name":      resourceName,
 				"namespace": c.namespace,
-				"labels": map[string]interface{}{
-					"app.kubernetes.io/managed-by": "ddnsbridge4extdns",
-					"ddns-zone":                    sanitizeLabel(upd.Zone),
-				},
+				"labels":    labels,
 			},
 			"spec": map[string]interface{}{
 				"endpoints": []interface{}{
@@ -203,6 +218,7 @@ func sanitizeLabel(zone string) string {
 
 // dnsNameToK8sName converts a DNS name to a valid Kubernetes name
 func dnsNameToK8sName(name string) string {
+	name = strings.ToLower(name)
 	result := make([]rune, 0, len(name))
 	for _, r := range name {
 		if isAlphanumeric(r) || r == '-' {
@@ -216,7 +232,7 @@ func dnsNameToK8sName(name string) string {
 
 // isAlphanumeric checks if a rune is alphanumeric
 func isAlphanumeric(r rune) bool {
-	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
 }
 
 // isNotFoundError checks if an error is a not found error

@@ -26,6 +26,9 @@ type Config struct {
 	// Zone settings
 	AllowedZones []string
 
+	// Custom labels for DNSEndpoint resources
+	CustomLabels map[string]string
+
 	// Logging
 	LogLevel string
 }
@@ -41,6 +44,7 @@ func LoadConfig() (*Config, error) {
 		Namespace:      getEnv("NAMESPACE", "default"),
 		DNSEndpointCRD: getEnvBool("DNS_ENDPOINT_CRD", true),
 		AllowedZones:   getEnvSlice("ALLOWED_ZONES", ","),
+		CustomLabels:   getEnvMap("CUSTOM_LABELS", ",", "="),
 		LogLevel:       getEnv("LOG_LEVEL", "info"),
 	}
 
@@ -127,6 +131,28 @@ func getEnvSlice(key, separator string) []string {
 	for _, part := range parts {
 		if trimmed := strings.TrimSpace(part); trimmed != "" {
 			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+func getEnvMap(key, pairSeparator, kvSeparator string) map[string]string {
+	value := os.Getenv(key)
+	if value == "" {
+		return map[string]string{}
+	}
+	result := make(map[string]string)
+	pairs := strings.Split(value, pairSeparator)
+	for _, pair := range pairs {
+		if trimmed := strings.TrimSpace(pair); trimmed != "" {
+			parts := strings.SplitN(trimmed, kvSeparator, 2)
+			if len(parts) == 2 {
+				k := strings.TrimSpace(parts[0])
+				v := strings.TrimSpace(parts[1])
+				if k != "" {
+					result[k] = v
+				}
+			}
 		}
 	}
 	return result

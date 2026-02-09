@@ -105,6 +105,7 @@ Configuration is done via environment variables:
 | `NAMESPACE` | Target Kubernetes namespace for DNSEndpoints | `default` | No |
 | `DNS_ENDPOINT_CRD` | Use DNSEndpoint CRD | `true` | No |
 | `ALLOWED_ZONES` | Comma-separated list of allowed zones | - | **Yes** |
+| `CUSTOM_LABELS` | Custom labels for DNSEndpoint resources (format: `key1=value1,key2=value2`) | - | No |
 | `LOG_LEVEL` | Log level | `info` | No |
 
 ### Supported TSIG Algorithms
