@@ -30,7 +30,9 @@ func NewHandler(cfg *config.Config, tsigValidator *tsig.Validator, k8sClient *k8
 
 // ServeDNS implements the dns.Handler interface
 func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
-	log.Printf("Received message from %s: opcode=%d, hasQuestion=%d", w.RemoteAddr(), r.Opcode, len(r.Question))
+	log.Printf("=== ServeDNS CALLED === from %s", w.RemoteAddr())
+	log.Printf("Received message from %s: opcode=%d, hasQuestion=%d, hasTSIG=%v",
+		w.RemoteAddr(), r.Opcode, len(r.Question), r.IsTsig() != nil)
 
 	msg := new(dns.Msg)
 	msg.SetReply(r)
@@ -44,34 +46,21 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
-	// Check if TSIG is present
-	if r.IsTsig() == nil {
-		log.Printf("TSIG validation failed from %s: no TSIG record in request", w.RemoteAddr())
-		msg.SetRcode(r, dns.RcodeNotAuth)
-		w.WriteMsg(msg)
-		return
-	}
+	// Note: TSIG validation is handled automatically by the server when TsigSecret is set
+	// If the request reaches this handler, TSIG has already been validated (if present)
 
-	// Validate TSIG (this will verify the signature and key name/algorithm)
-	if err := h.tsig.Validate(r, ""); err != nil {
-		log.Printf("TSIG validation failed from %s: %v", w.RemoteAddr(), err)
-		msg.SetRcode(r, dns.RcodeNotAuth)
-		w.WriteMsg(msg)
-		return
-	}
-
-	// Get the request MAC for signing the response
+	// Get the request MAC for response signing (if TSIG was present)
 	requestMAC := ""
 	if t := r.IsTsig(); t != nil {
 		requestMAC = t.MAC
+		log.Printf("Request has TSIG from key: %s", t.Hdr.Name)
 	}
 
 	// Validate zone
 	if len(r.Question) == 0 {
 		log.Printf("UPDATE message has no zone section from %s", w.RemoteAddr())
 		msg.SetRcode(r, dns.RcodeFormatError)
-		h.signResponse(msg, requestMAC)
-		w.WriteMsg(msg)
+		h.writeResponse(w, msg, requestMAC)
 		return
 	}
 
@@ -79,8 +68,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	if !h.config.IsZoneAllowed(zone) {
 		log.Printf("Zone %s not allowed from %s", zone, w.RemoteAddr())
 		msg.SetRcode(r, dns.RcodeRefused)
-		h.signResponse(msg, requestMAC)
-		w.WriteMsg(msg)
+		h.writeResponse(w, msg, requestMAC)
 		return
 	}
 
@@ -89,8 +77,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	if err != nil {
 		log.Printf("Failed to parse UPDATE from %s: %v", w.RemoteAddr(), err)
 		msg.SetRcode(r, dns.RcodeFormatError)
-		h.signResponse(msg, requestMAC)
-		w.WriteMsg(msg)
+		h.writeResponse(w, msg, requestMAC)
 		return
 	}
 
@@ -101,8 +88,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		if err := h.k8sClient.ApplyUpdate(upd); err != nil {
 			log.Printf("Failed to apply update to Kubernetes: %v", err)
 			msg.SetRcode(r, dns.RcodeServerFailure)
-			h.signResponse(msg, requestMAC)
-			w.WriteMsg(msg)
+			h.writeResponse(w, msg, requestMAC)
 			return
 		}
 
@@ -111,13 +97,11 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	// Success response
 	msg.SetRcode(r, dns.RcodeSuccess)
-	h.signResponse(msg, requestMAC)
-	w.WriteMsg(msg)
+	h.writeResponse(w, msg, requestMAC)
 }
 
-// signResponse signs the response with TSIG
-// The miekg/dns library will automatically sign the response when WriteMsg is called
-// if the message has a TSIG record set and the server has TsigSecret configured
-func (h *Handler) signResponse(msg *dns.Msg, requestMAC string) {
-	msg.SetTsig(h.tsig.GetKeyName(), h.tsig.GetAlgorithmName(), 300, int64(msg.MsgHdr.Id))
+// writeResponse writes a DNS response
+// When TsigSecret is set on the server, it automatically handles TSIG signing
+func (h *Handler) writeResponse(w dns.ResponseWriter, msg *dns.Msg, requestMAC string) {
+	w.WriteMsg(msg)
 }

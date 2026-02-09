@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
@@ -52,7 +51,7 @@ func LoadConfig() (*Config, error) {
 	// Log TSIG key information
 	log.Printf("TSIG Configuration:")
 	log.Printf("  Key Name: %s", cfg.TSIGKey)
-	log.Printf("  Key Secret (base64): %s", base64.StdEncoding.EncodeToString([]byte(cfg.TSIGSecret)))
+	log.Printf("  Key Secret : %s", cfg.TSIGSecret)
 	log.Printf("  Key Algorithm: %s", cfg.TSIGAlgorithm)
 
 	return cfg, nil

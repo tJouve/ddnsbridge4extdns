@@ -42,27 +42,29 @@ func main() {
 	// Create DNS handler
 	dnsHandler := handler.NewHandler(cfg, tsigValidator, k8sClient)
 
-	// Create TSIG secret map (with both key name variants for compatibility)
-	tsigSecretMap := map[string]string{
-		cfg.TSIGKey:     cfg.TSIGSecret,
+	// Create DNS server for UDP and TCP
+	// Set TsigSecret on the server - this is required for TSIG to work properly
+	// The server will handle TSIG verification automatically before calling the handler
+	serverAddr := fmt.Sprintf("%s:%d", cfg.ListenAddr, cfg.Port)
+
+	// TSIG secret map - include both with and without trailing dot
+	tsigSecret := map[string]string{
+		cfg.TSIGKey:       cfg.TSIGSecret,
 		cfg.TSIGKey + ".": cfg.TSIGSecret,
 	}
-
-	// Create DNS server for UDP and TCP
-	serverAddr := fmt.Sprintf("%s:%d", cfg.ListenAddr, cfg.Port)
 
 	udpServer := &dns.Server{
 		Addr:       serverAddr,
 		Net:        "udp",
 		Handler:    dnsHandler,
-		TsigSecret: tsigSecretMap,
+		TsigSecret: tsigSecret,
 	}
 
 	tcpServer := &dns.Server{
 		Addr:       serverAddr,
 		Net:        "tcp",
 		Handler:    dnsHandler,
-		TsigSecret: tsigSecretMap,
+		TsigSecret: tsigSecret,
 	}
 
 	// Start UDP server
