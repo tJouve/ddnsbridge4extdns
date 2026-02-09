@@ -149,11 +149,17 @@ func getKubeConfig() (*rest.Config, error) {
 		return config, nil
 	}
 
-	// Fall back to kubeconfig file
+	// Fallback to the clientcmd deferred loader (this will pick up KUBECONFIG or defaults too)
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	configOverrides := &clientcmd.ConfigOverrides{}
 	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
-	return kubeConfig.ClientConfig()
+	cfg, cfgErr := kubeConfig.ClientConfig()
+	if cfgErr == nil {
+		return cfg, nil
+	}
+
+	// Return aggregated error with a helpful message
+	return nil, fmt.Errorf("no kubeconfig found (in-cluster, KUBECONFIG); last error: %w", cfgErr)
 }
 
 // sanitizeResourceName converts a hostname to a valid Kubernetes resource name

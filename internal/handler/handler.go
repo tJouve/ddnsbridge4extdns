@@ -100,8 +100,36 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	h.writeResponse(w, msg, requestMAC)
 }
 
-// writeResponse writes a DNS response
-// When TsigSecret is set on the server, it automatically handles TSIG signing
+// writeResponse writes a DNS response with TSIG signing if the request had TSIG
 func (h *Handler) writeResponse(w dns.ResponseWriter, msg *dns.Msg, requestMAC string) {
+	// If the request had TSIG, we need to sign the response
+	if requestMAC != "" {
+		// Add TSIG to the response
+		// The key name should end with a dot (FQDN)
+		keyName := h.config.TSIGKey
+		if keyName[len(keyName)-1] != '.' {
+			keyName = keyName + "."
+		}
+
+		// Get the algorithm in FQDN format
+		algorithm := h.tsig.GetAlgorithmName()
+
+		// Set TSIG parameters on the message
+		msg.SetTsig(keyName, algorithm, 300, 0)
+
+		// Sign the message using the request MAC for chaining
+		// dns.TsigGenerate returns the packed signed message
+		buf, _, err := dns.TsigGenerate(msg, h.config.TSIGSecret, requestMAC, false)
+		if err != nil {
+			log.Printf("Failed to generate TSIG for response: %v", err)
+			w.WriteMsg(msg)
+			return
+		}
+
+		// Write the signed response directly
+		w.Write(buf)
+		return
+	}
+
 	w.WriteMsg(msg)
 }

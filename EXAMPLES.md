@@ -35,19 +35,22 @@ go run ./cmd/server
 ### Create TSIG Key File
 
 ```bash
-cat > /tmp/ddns.key <<EOF
+cat > ddns.key <<EOF
 key "opnsense-ddns." {
     algorithm hmac-sha256;
     secret "bXktc2VjcmV0LWtleQ==";
 };
 EOF
 ```
-
+or use
+```bash
+tsig-keygen -a hmac-sha256 opnsense-ddns. >  ddns.key
+```
 ### Send a DNS UPDATE
 
 ```bash
 # Add an A record
-nsupdate -k /tmp/ddns.key <<EOF
+nsupdate -k ddns.key <<EOF
 server 127.0.0.1 5353
 zone example.com
 update add router.example.com 300 A 192.168.1.1
@@ -55,7 +58,7 @@ send
 EOF
 
 # Add an AAAA record
-nsupdate -k /tmp/ddns.key <<EOF
+nsupdate -k ddns.key <<EOF
 server 127.0.0.1 5353
 zone example.com
 update add router.example.com 300 AAAA 2001:db8::1
@@ -63,7 +66,7 @@ send
 EOF
 
 # Delete a record
-nsupdate -k /tmp/ddns.key <<EOF
+nsupdate -k ddns.key <<EOF
 server 127.0.0.1 5353
 zone example.com
 update delete router.example.com A

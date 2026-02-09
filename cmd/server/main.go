@@ -53,18 +53,33 @@ func main() {
 		cfg.TSIGKey + ".": cfg.TSIGSecret,
 	}
 
+	// Custom MsgAcceptFunc: accept queries, notifies and UPDATE opcodes; ignore responses; reject others
+	msgAccept := func(dh dns.Header) dns.MsgAcceptAction {
+		// QR flag (response) is the most significant bit (1<<15 == 0x8000)
+		if dh.Bits&0x8000 != 0 { // is a response
+			return dns.MsgIgnore
+		}
+		opcode := int((dh.Bits >> 11) & 0xF)
+		if opcode == dns.OpcodeQuery || opcode == dns.OpcodeNotify || opcode == dns.OpcodeUpdate {
+			return dns.MsgAccept
+		}
+		return dns.MsgRejectNotImplemented
+	}
+
 	udpServer := &dns.Server{
-		Addr:       serverAddr,
-		Net:        "udp",
-		Handler:    dnsHandler,
-		TsigSecret: tsigSecret,
+		Addr:          serverAddr,
+		Net:           "udp",
+		Handler:       dnsHandler,
+		TsigSecret:    tsigSecret,
+		MsgAcceptFunc: msgAccept,
 	}
 
 	tcpServer := &dns.Server{
-		Addr:       serverAddr,
-		Net:        "tcp",
-		Handler:    dnsHandler,
-		TsigSecret: tsigSecret,
+		Addr:          serverAddr,
+		Net:           "tcp",
+		Handler:       dnsHandler,
+		TsigSecret:    tsigSecret,
+		MsgAcceptFunc: msgAccept,
 	}
 
 	// Start UDP server
