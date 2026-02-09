@@ -109,7 +109,7 @@ metadata:
   name: ddnsbridge4extdns
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
   name: ddnsbridge4extdns
 rules:
@@ -118,7 +118,7 @@ rules:
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: ddnsbridge4extdns
 roleRef:
