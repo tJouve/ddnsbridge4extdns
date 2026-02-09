@@ -1,10 +1,10 @@
-# ddnstoextdns
+# ddnsbridge4extdns
 
 RFC2136 DNS UPDATE Bridge for Kubernetes ExternalDNS
 
 ## Overview
 
-`ddnstoextdns` is a lightweight RFC2136 DNS UPDATE server designed specifically for OPNsense DDNS integration with Kubernetes. It accepts DNS UPDATE messages (RFC2136) over UDP/TCP port 53, validates them using TSIG authentication, parses A/AAAA record create/update/delete operations, and translates them into Kubernetes DNSEndpoint resources that are consumed by ExternalDNS.
+`ddnsbridge4extdns` is a lightweight RFC2136 DNS UPDATE server designed specifically for OPNsense DDNS integration with Kubernetes. It accepts DNS UPDATE messages (RFC2136) over UDP/TCP port 53, validates them using TSIG authentication, parses A/AAAA record create/update/delete operations, and translates them into Kubernetes DNSEndpoint resources that are consumed by ExternalDNS.
 
 **Key Features:**
 - ✅ RFC2136 DNS UPDATE protocol support (UDP & TCP)
@@ -28,7 +28,7 @@ OPNsense DDNS Client
         ↓
    DNS UPDATE (RFC2136) over UDP/TCP:53
         ↓
-   ddnstoextdns (TSIG validation)
+   ddnsbridge4extdns (TSIG validation)
         ↓
    Kubernetes DNSEndpoint CRD
         ↓
@@ -49,7 +49,7 @@ OPNsense DDNS Client
 ### 1. Build the Docker Image
 
 ```bash
-docker build -t ddnstoextdns:latest .
+docker build -t ddnsbridge4extdns:latest .
 ```
 
 ### 2. Configure TSIG Credentials
@@ -86,7 +86,7 @@ kubectl apply -f deploy/kubernetes/deployment.yaml
 ### 5. Get the Service External IP
 
 ```bash
-kubectl get svc -n ddnstoextdns ddnstoextdns
+kubectl get svc -n ddnsbridge4extdns ddnsbridge4extdns
 ```
 
 Note the `EXTERNAL-IP` - this is the IP address your OPNsense DDNS client should send updates to.
@@ -119,7 +119,7 @@ Configuration is done via environment variables:
 1. Navigate to **Services → Dynamic DNS**
 2. Add a new entry with these settings:
    - **Service**: RFC2136
-   - **Server**: `<ddnstoextdns-service-external-ip>`
+   - **Server**: `<ddnsbridge4extdns-service-external-ip>`
    - **Zone**: Your zone (e.g., `example.com`)
    - **Key name**: Your TSIG key name (matches `TSIG_KEY`)
    - **Key**: Your TSIG secret (matches `TSIG_SECRET`)
@@ -143,7 +143,7 @@ EOF
 
 # Create an update file
 cat > /tmp/update.txt <<EOF
-server <ddnstoextdns-ip> 53
+server <ddnsbridge4extdns-ip> 53
 zone example.com
 update delete test.example.com A
 update add test.example.com 300 A 192.168.1.100
@@ -165,7 +165,7 @@ You should see a DNSEndpoint resource created for your update.
 ### Check Logs
 
 ```bash
-kubectl logs -n ddnstoextdns -l app=ddnstoextdns -f
+kubectl logs -n ddnsbridge4extdns -l app=ddnsbridge4extdns -f
 ```
 
 ## Security Considerations
@@ -174,7 +174,7 @@ kubectl logs -n ddnstoextdns -l app=ddnstoextdns -f
 
 2. **Zone-Scoped**: Only zones listed in `ALLOWED_ZONES` can be updated. This prevents unauthorized zone updates.
 
-3. **Network Policies**: Consider using Kubernetes Network Policies to restrict access to the ddnstoextdns service.
+3. **Network Policies**: Consider using Kubernetes Network Policies to restrict access to the ddnsbridge4extdns service.
 
 4. **Secret Management**: Store TSIG secrets securely using Kubernetes Secrets. Consider using external secret management solutions like Vault or Sealed Secrets.
 
@@ -191,7 +191,7 @@ metadata:
   name: <sanitized-hostname>
   namespace: default
   labels:
-    app.kubernetes.io/managed-by: ddnstoextdns
+    app.kubernetes.io/managed-by: ddnsbridge4extdns
     ddns-zone: <zone-name>
 spec:
   endpoints:
@@ -208,17 +208,17 @@ ExternalDNS will automatically pick up these resources and create/update/delete 
 
 ```bash
 # Clone the repository
-git clone https://github.com/tJouve/ddnstoextdns.git
-cd ddnstoextdns
+git clone https://github.com/tJouve/ddnsbridge4extdns.git
+cd ddnsbridge4extdns
 
 # Build
-go build -o ddnstoextdns ./cmd/server
+go build -o ddnsbridge4extdns ./cmd/server
 
 # Run locally (requires kubeconfig)
 export TSIG_KEY="your-key"
 export TSIG_SECRET="your-secret"
 export ALLOWED_ZONES="example.com"
-./ddnstoextdns
+./ddnsbridge4extdns
 ```
 
 ## Development
@@ -252,10 +252,10 @@ go test ./...
 
 ### DNS UPDATE rejected with NOTAUTH
 
-- Verify TSIG key name matches between OPNsense and ddnstoextdns
+- Verify TSIG key name matches between OPNsense and ddnsbridge4extdns
 - Verify TSIG secret matches (base64-encoded)
 - Verify TSIG algorithm matches
-- Check logs: `kubectl logs -n ddnstoextdns -l app=ddnstoextdns`
+- Check logs: `kubectl logs -n ddnsbridge4extdns -l app=ddnsbridge4extdns`
 
 ### DNS UPDATE rejected with REFUSED
 

@@ -8,14 +8,14 @@ import (
 	"syscall"
 
 	"github.com/miekg/dns"
-	"github.com/tJouve/ddnstoextdns/internal/handler"
-	"github.com/tJouve/ddnstoextdns/pkg/config"
-	"github.com/tJouve/ddnstoextdns/pkg/k8s"
-	"github.com/tJouve/ddnstoextdns/pkg/tsig"
+	"github.com/tJouve/ddnsbridge4extdns/internal/handler"
+	"github.com/tJouve/ddnsbridge4extdns/pkg/config"
+	"github.com/tJouve/ddnsbridge4extdns/pkg/k8s"
+	"github.com/tJouve/ddnsbridge4extdns/pkg/tsig"
 )
 
 func main() {
-	log.Println("Starting ddnstoextdns - RFC2136 DNS UPDATE server for Kubernetes ExternalDNS")
+	log.Println("Starting ddnsbridge4extdns - RFC2136 DNS UPDATE server for Kubernetes ExternalDNS")
 
 	// Load configuration
 	cfg, err := config.LoadConfig()
@@ -42,25 +42,27 @@ func main() {
 	// Create DNS handler
 	dnsHandler := handler.NewHandler(cfg, tsigValidator, k8sClient)
 
+	// Create TSIG secret map (with both key name variants for compatibility)
+	tsigSecretMap := map[string]string{
+		cfg.TSIGKey:     cfg.TSIGSecret,
+		cfg.TSIGKey + ".": cfg.TSIGSecret,
+	}
+
 	// Create DNS server for UDP and TCP
 	serverAddr := fmt.Sprintf("%s:%d", cfg.ListenAddr, cfg.Port)
 
 	udpServer := &dns.Server{
-		Addr:    serverAddr,
-		Net:     "udp",
-		Handler: dnsHandler,
-		TsigSecret: map[string]string{
-			cfg.TSIGKey: cfg.TSIGSecret,
-		},
+		Addr:       serverAddr,
+		Net:        "udp",
+		Handler:    dnsHandler,
+		TsigSecret: tsigSecretMap,
 	}
 
 	tcpServer := &dns.Server{
-		Addr:    serverAddr,
-		Net:     "tcp",
-		Handler: dnsHandler,
-		TsigSecret: map[string]string{
-			cfg.TSIGKey: cfg.TSIGSecret,
-		},
+		Addr:       serverAddr,
+		Net:        "tcp",
+		Handler:    dnsHandler,
+		TsigSecret: tsigSecretMap,
 	}
 
 	// Start UDP server

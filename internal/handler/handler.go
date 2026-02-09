@@ -4,10 +4,10 @@ import (
 	"log"
 
 	"github.com/miekg/dns"
-	"github.com/tJouve/ddnstoextdns/pkg/config"
-	"github.com/tJouve/ddnstoextdns/pkg/k8s"
-	"github.com/tJouve/ddnstoextdns/pkg/tsig"
-	"github.com/tJouve/ddnstoextdns/pkg/update"
+	"github.com/tJouve/ddnsbridge4extdns/pkg/config"
+	"github.com/tJouve/ddnsbridge4extdns/pkg/k8s"
+	"github.com/tJouve/ddnsbridge4extdns/pkg/tsig"
+	"github.com/tJouve/ddnsbridge4extdns/pkg/update"
 )
 
 // Handler handles DNS UPDATE requests
@@ -30,6 +30,8 @@ func NewHandler(cfg *config.Config, tsigValidator *tsig.Validator, k8sClient *k8
 
 // ServeDNS implements the dns.Handler interface
 func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+	log.Printf("Received message from %s: opcode=%d, hasQuestion=%d", w.RemoteAddr(), r.Opcode, len(r.Question))
+
 	msg := new(dns.Msg)
 	msg.SetReply(r)
 	msg.Authoritative = true
@@ -42,12 +44,18 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
-	// Validate TSIG
+	// Check if TSIG is present
+	if r.IsTsig() == nil {
+		log.Printf("TSIG validation failed from %s: no TSIG record in request", w.RemoteAddr())
+		msg.SetRcode(r, dns.RcodeNotAuth)
+		w.WriteMsg(msg)
+		return
+	}
+
+	// Validate TSIG (this will verify the signature and key name/algorithm)
 	if err := h.tsig.Validate(r, ""); err != nil {
 		log.Printf("TSIG validation failed from %s: %v", w.RemoteAddr(), err)
 		msg.SetRcode(r, dns.RcodeNotAuth)
-		// Sign the response
-		msg.SetTsig(h.tsig.GetKeyName(), h.tsig.GetAlgorithmName(), 300, int64(msg.MsgHdr.Id))
 		w.WriteMsg(msg)
 		return
 	}
@@ -108,9 +116,8 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 }
 
 // signResponse signs the response with TSIG
+// The miekg/dns library will automatically sign the response when WriteMsg is called
+// if the message has a TSIG record set and the server has TsigSecret configured
 func (h *Handler) signResponse(msg *dns.Msg, requestMAC string) {
 	msg.SetTsig(h.tsig.GetKeyName(), h.tsig.GetAlgorithmName(), 300, int64(msg.MsgHdr.Id))
-
-	// The miekg/dns library will automatically sign when WriteMsg is called
-	// if the TSIG record is present
 }

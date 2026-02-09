@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"log"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,7 +13,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/tJouve/ddnstoextdns/pkg/update"
+	"github.com/tJouve/ddnsbridge4extdns/pkg/update"
 )
 
 // Client manages Kubernetes DNSEndpoint resources
@@ -80,7 +81,7 @@ func (c *Client) createOrUpdateEndpoint(ctx context.Context, upd *update.DNSUpda
 				"name":      resourceName,
 				"namespace": c.namespace,
 				"labels": map[string]interface{}{
-					"app.kubernetes.io/managed-by": "ddnstoextdns",
+					"app.kubernetes.io/managed-by": "ddnsbridge4extdns",
 					"ddns-zone":                    sanitizeLabel(upd.Zone),
 				},
 			},
@@ -108,6 +109,7 @@ func (c *Client) createOrUpdateEndpoint(ctx context.Context, upd *update.DNSUpda
 		if err != nil {
 			return fmt.Errorf("failed to update DNSEndpoint: %w", err)
 		}
+		log.Printf("Successfully updated DNSEndpoint %s/%s", c.namespace, resourceName)
 		return nil
 	}
 
@@ -116,6 +118,7 @@ func (c *Client) createOrUpdateEndpoint(ctx context.Context, upd *update.DNSUpda
 	if err != nil {
 		return fmt.Errorf("failed to create DNSEndpoint: %w", err)
 	}
+	log.Printf("Successfully created DNSEndpoint %s/%s", c.namespace, resourceName)
 
 	return nil
 }
@@ -131,6 +134,8 @@ func (c *Client) deleteEndpoint(ctx context.Context, upd *update.DNSUpdate) erro
 		if !isNotFoundError(err) {
 			return fmt.Errorf("failed to delete DNSEndpoint: %w", err)
 		}
+	} else {
+		log.Printf("Successfully deleted DNSEndpoint %s/%s", c.namespace, resourceName)
 	}
 
 	return nil

@@ -11,20 +11,18 @@ RUN go mod download
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ddnstoextdns ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o ddnsbridge4extdns ./cmd/server
 
 # Final stage
-FROM alpine:latest
+FROM gcr.io/distroless/base-debian13:nonroot
 
-RUN apk --no-cache add ca-certificates
-
-WORKDIR /root/
+WORKDIR /
 
 # Copy the binary from builder
-COPY --from=builder /app/ddnstoextdns .
-
+COPY --from=builder --chown=65532:65532 /app/ddnsbridge4extdns .
 # Expose DNS port
-EXPOSE 53/udp 53/tcp
+EXPOSE 5353/udp 5353/tcp
 
 # Run the server
-ENTRYPOINT ["./ddnstoextdns"]
+USER 65532
+ENTRYPOINT ["./ddnsbridge4extdns"]

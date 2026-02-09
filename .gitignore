@@ -7,7 +7,7 @@
 *.dll
 *.so
 *.dylib
-ddnstoextdns
+ddnsbridge4extdns
 
 # Test binary, built with `go test -c`
 *.test
@@ -29,7 +29,8 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
-server
+.idea/
+.vscode/
 .history/
+
+*.iml

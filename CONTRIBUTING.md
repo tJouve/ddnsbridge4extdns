@@ -1,6 +1,6 @@
-# Contributing to ddnstoextdns
+# Contributing to ddnsbridge4extdns
 
-Thank you for your interest in contributing to ddnstoextdns! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to ddnsbridge4extdns! This document provides guidelines and information for contributors.
 
 ## Getting Started
 
@@ -15,8 +15,8 @@ Thank you for your interest in contributing to ddnstoextdns! This document provi
 
 1. Fork and clone the repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/ddnstoextdns.git
-   cd ddnstoextdns
+   git clone https://github.com/YOUR_USERNAME/ddnsbridge4extdns.git
+   cd ddnsbridge4extdns
    ```
 
 2. Install dependencies:

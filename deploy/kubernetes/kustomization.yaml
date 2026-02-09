@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: ddnsbridge4extdns
+
+namespace: ddnsbridge4extdns
+
+resources:
+- deployment.yaml
+
+
+commonAnnotations:
+  app.kubernetes.io/description: RFC2136 DNS UPDATE Bridge for Kubernetes ExternalDNS
+  app.kubernetes.io/version: &version v0.1.6
+
+images:
+- name: ddnsbridge4extdns
+  newName: tjouve/ddnsbridge4extdns
+  newTag: *version
+labels:
+- includeSelectors: true
+  pairs:
+    app.kubernetes.io/component: dns-bridge
+    app.kubernetes.io/instance: ddnsbridge4extdns
+    app.kubernetes.io/name: ddnsbridge4extdns
+    

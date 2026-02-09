@@ -88,6 +88,6 @@ jobs:
       with:
         context: .
         push: false
-        tags: ddnstoextdns:test
+        tags: ddnsbridge4extdns:test
         cache-from: type=gha
         cache-to: type=gha,mode=max

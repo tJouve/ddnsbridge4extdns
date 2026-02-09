@@ -90,7 +90,7 @@ kubectl get dnsendpoint router-example-com -n default -o yaml
 
 - **Enabled**: ✓ Check
 - **Service**: RFC2136
-- **Server**: `<your-ddnstoextdns-service-ip>` (Get from `kubectl get svc -n ddnstoextdns`)
+- **Server**: `<your-ddnsbridge4extdns-service-ip>` (Get from `kubectl get svc -n ddnsbridge4extdns`)
 - **Zone**: `example.com`
 - **Key name**: `opnsense-ddns.`
 - **Key**: `bXktc2VjcmV0LWtleQ==` (your base64-encoded secret)
@@ -111,7 +111,7 @@ Check the OPNsense logs:
 
 Check Kubernetes:
 ```bash
-kubectl logs -n ddnstoextdns -l app=ddnstoextdns -f
+kubectl logs -n ddnsbridge4extdns -l app=ddnsbridge4extdns -f
 kubectl get dnsendpoint -n default
 ```
 
@@ -120,8 +120,8 @@ kubectl get dnsendpoint -n default
 ### Step 1: Build and Push Docker Image
 
 ```bash
-docker build -t your-registry/ddnstoextdns:latest .
-docker push your-registry/ddnstoextdns:latest
+docker build -t your-registry/ddnsbridge4extdns:latest .
+docker push your-registry/ddnsbridge4extdns:latest
 ```
 
 ### Step 2: Update Deployment Manifest
@@ -130,7 +130,7 @@ Edit `deploy/kubernetes/deployment.yaml`:
 
 1. Update the image:
    ```yaml
-   image: your-registry/ddnstoextdns:latest
+   image: your-registry/ddnsbridge4extdns:latest
    ```
 
 2. Update TSIG credentials:
@@ -155,7 +155,7 @@ kubectl apply -f deploy/kubernetes/deployment.yaml
 ### Step 4: Get Service IP
 
 ```bash
-kubectl get svc -n ddnstoextdns ddnstoextdns
+kubectl get svc -n ddnsbridge4extdns ddnsbridge4extdns
 ```
 
 Use the `EXTERNAL-IP` in your OPNsense configuration.
@@ -165,7 +165,7 @@ Use the `EXTERNAL-IP` in your OPNsense configuration.
 ### Check Server Logs
 
 ```bash
-kubectl logs -n ddnstoextdns -l app=ddnstoextdns -f
+kubectl logs -n ddnsbridge4extdns -l app=ddnsbridge4extdns -f
 ```
 
 ### Common Errors
@@ -210,18 +210,18 @@ openssl rand -base64 32
 
 ### 2. Restrict Network Access
 
-Use Kubernetes NetworkPolicies to restrict access to the ddnstoextdns service:
+Use Kubernetes NetworkPolicies to restrict access to the ddnsbridge4extdns service:
 
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: ddnstoextdns-ingress
-  namespace: ddnstoextdns
+  name: ddnsbridge4extdns-ingress
+  namespace: ddnsbridge4extdns
 spec:
   podSelector:
     matchLabels:
-      app: ddnstoextdns
+      app: ddnsbridge4extdns
   policyTypes:
   - Ingress
   ingress:
@@ -297,7 +297,7 @@ spec:
 
 ### Supported DNS Providers
 
-ddnstoextdns works with any DNS provider supported by ExternalDNS:
+ddnsbridge4extdns works with any DNS provider supported by ExternalDNS:
 
 - AWS Route53
 - Cloudflare

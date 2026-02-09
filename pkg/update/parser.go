@@ -2,6 +2,7 @@ package update
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"strings"
 
@@ -147,9 +148,13 @@ func (u *DNSUpdate) String() string {
 	}
 
 	if u.IP != nil {
-		return fmt.Sprintf("%s %s %s -> %s (TTL: %d)", typeStr, recordTypeStr, u.Name, u.IP.String(), u.TTL)
+		msg := fmt.Sprintf("%s %s %s -> %s (TTL: %d)", typeStr, recordTypeStr, u.Name, u.IP.String(), u.TTL)
+		log.Printf("Parsed DNS update: %s", msg)
+		return msg
 	}
-	return fmt.Sprintf("%s %s %s", typeStr, recordTypeStr, u.Name)
+	msg := fmt.Sprintf("%s %s %s", typeStr, recordTypeStr, u.Name)
+	log.Printf("Parsed DNS update: %s", msg)
+	return msg
 }
 
 // GetHostname returns the hostname without the zone suffix

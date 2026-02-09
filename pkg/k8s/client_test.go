@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/miekg/dns"
-	"github.com/tJouve/ddnstoextdns/pkg/update"
+	"github.com/tJouve/ddnsbridge4extdns/pkg/update"
 )
 
 func TestSanitizeResourceName(t *testing.T) {

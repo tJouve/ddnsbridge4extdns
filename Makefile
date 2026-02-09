@@ -1,10 +1,10 @@
 .PHONY: build test clean run docker-build docker-push deploy help
 
 # Variables
-BINARY_NAME=ddnstoextdns
-DOCKER_IMAGE?=ddnstoextdns
+BINARY_NAME=ddnsbridge4extdns
+DOCKER_IMAGE?=ddnsbridge4extdns
 DOCKER_TAG?=latest
-NAMESPACE?=ddnstoextdns
+NAMESPACE?=ddnsbridge4extdns
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -61,7 +61,7 @@ undeploy: ## Remove from Kubernetes
 
 logs: ## Show logs from deployed pods
 	@echo "Showing logs..."
-	kubectl logs -n $(NAMESPACE) -l app=ddnstoextdns -f
+	kubectl logs -n $(NAMESPACE) -l app=ddnsbridge4extdns -f
 
 status: ## Show deployment status
 	@echo "Deployment status:"

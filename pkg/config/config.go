@@ -1,7 +1,9 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -33,9 +35,9 @@ type Config struct {
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		ListenAddr:     getEnv("LISTEN_ADDR", "0.0.0.0"),
-		Port:           getEnvInt("PORT", 53),
-		TSIGKey:        getEnv("TSIG_KEY", ""),
-		TSIGSecret:     getEnv("TSIG_SECRET", ""),
+		Port:           getEnvInt("PORT", 5353),
+		TSIGKey:        getEnv("TSIG_KEY", "opnsense-ddns"),
+		TSIGSecret:     getEnv("TSIG_SECRET", "changeme"),
 		TSIGAlgorithm:  getEnv("TSIG_ALGORITHM", "hmac-sha256"),
 		Namespace:      getEnv("NAMESPACE", "default"),
 		DNSEndpointCRD: getEnvBool("DNS_ENDPOINT_CRD", true),
@@ -46,6 +48,12 @@ func LoadConfig() (*Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
+
+	// Log TSIG key information
+	log.Printf("TSIG Configuration:")
+	log.Printf("  Key Name: %s", cfg.TSIGKey)
+	log.Printf("  Key Secret (base64): %s", base64.StdEncoding.EncodeToString([]byte(cfg.TSIGSecret)))
+	log.Printf("  Key Algorithm: %s", cfg.TSIGAlgorithm)
 
 	return cfg, nil
 }

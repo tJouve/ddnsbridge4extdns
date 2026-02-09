@@ -2,6 +2,7 @@ package tsig
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/miekg/dns"
 )
@@ -25,6 +26,9 @@ func NewValidator(keyName, secret, algorithm string) *Validator {
 // Validate validates the TSIG signature on a DNS message
 func (v *Validator) Validate(msg *dns.Msg, requestMAC string) error {
 	if msg.IsTsig() == nil {
+		log.Printf("TSIG validation error: message does not contain TSIG record")
+		log.Printf("  Expected: TSIG key name=%s, algorithm=%s", v.keyName, v.getAlgorithmName())
+		log.Printf("  Provided: No TSIG record")
 		return fmt.Errorf("message does not contain TSIG record")
 	}
 
@@ -32,22 +36,34 @@ func (v *Validator) Validate(msg *dns.Msg, requestMAC string) error {
 
 	// Check if the key name matches
 	if tsig.Hdr.Name != v.keyName+"." && tsig.Hdr.Name != v.keyName {
+		log.Printf("TSIG validation error: key name mismatch")
+		log.Printf("  Expected: %s or %s.", v.keyName, v.keyName)
+		log.Printf("  Provided: %s", tsig.Hdr.Name)
 		return fmt.Errorf("TSIG key name mismatch: expected %s, got %s", v.keyName, tsig.Hdr.Name)
 	}
 
 	// Validate the algorithm
 	expectedAlg := v.getAlgorithmName()
 	if tsig.Algorithm != expectedAlg {
+		log.Printf("TSIG validation error: algorithm mismatch")
+		log.Printf("  Expected: %s", expectedAlg)
+		log.Printf("  Provided: %s", tsig.Algorithm)
 		return fmt.Errorf("TSIG algorithm mismatch: expected %s, got %s", expectedAlg, tsig.Algorithm)
 	}
 
 	// Verify the TSIG signature using dns.TsigVerify
 	buf, err := msg.Pack()
 	if err != nil {
+		log.Printf("TSIG validation error: failed to pack message: %v", err)
 		return fmt.Errorf("failed to pack message: %w", err)
 	}
 
 	if err := dns.TsigVerify(buf, v.secret, requestMAC, false); err != nil {
+		log.Printf("TSIG validation error: signature verification failed")
+		log.Printf("  Key name: %s", tsig.Hdr.Name)
+		log.Printf("  Algorithm: %s", tsig.Algorithm)
+		log.Printf("  Error: %v", err)
+		log.Printf("  Hint: Check that the TSIG secret matches on both client and server")
 		return fmt.Errorf("TSIG verification failed: %w", err)
 	}
 
