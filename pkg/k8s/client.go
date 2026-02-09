@@ -225,7 +225,7 @@ func dnsNameToK8sName(name string) string {
 	for _, r := range name {
 		if isAlphanumeric(r) || r == '-' {
 			result = append(result, r)
-		} else if r == '.' || r == '_' {
+		} else if r == '.' || r == '_' || r == ':' {
 			result = append(result, '-')
 		}
 	}

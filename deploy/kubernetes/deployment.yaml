@@ -22,12 +22,9 @@ metadata:
 data:
   LISTEN_ADDR: "0.0.0.0"
   PORT: "5353"
-  DNS_ENDPOINT_CRD: "true"
   ALLOWED_ZONES: "smokingcat.net"
   LOG_LEVEL: "info"
-  # Optional: Add custom labels to DNSEndpoint resources
-  # Format: key1=value1,key2=value2
-  # Example: CUSTOM_LABELS: "environment=production,team=infrastructure"
+  CUSTOM_LABELS: "external-dns.smokingcat.net/visibility=private"
 ---
 apiVersion: apps/v1
 kind: Deployment

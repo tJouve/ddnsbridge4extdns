@@ -20,8 +20,7 @@ type Config struct {
 	TSIGAlgorithm string
 
 	// Kubernetes settings
-	Namespace      string
-	DNSEndpointCRD bool
+	Namespace string
 
 	// Zone settings
 	AllowedZones []string
@@ -36,16 +35,15 @@ type Config struct {
 // LoadConfig loads configuration from environment variables
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		ListenAddr:     getEnv("LISTEN_ADDR", "0.0.0.0"),
-		Port:           getEnvInt("PORT", 5353),
-		TSIGKey:        getEnv("TSIG_KEY", "opnsense-ddns"),
-		TSIGSecret:     getEnv("TSIG_SECRET", "changeme"),
-		TSIGAlgorithm:  getEnv("TSIG_ALGORITHM", "hmac-sha256"),
-		Namespace:      getEnv("NAMESPACE", "default"),
-		DNSEndpointCRD: getEnvBool("DNS_ENDPOINT_CRD", true),
-		AllowedZones:   getEnvSlice("ALLOWED_ZONES", ","),
-		CustomLabels:   getEnvMap("CUSTOM_LABELS", ",", "="),
-		LogLevel:       getEnv("LOG_LEVEL", "info"),
+		ListenAddr:    getEnv("LISTEN_ADDR", "0.0.0.0"),
+		Port:          getEnvInt("PORT", 5353),
+		TSIGKey:       getEnv("TSIG_KEY", "opnsense-ddns"),
+		TSIGSecret:    getEnv("TSIG_SECRET", "changeme"),
+		TSIGAlgorithm: getEnv("TSIG_ALGORITHM", "hmac-sha256"),
+		Namespace:     getEnv("NAMESPACE", "default"),
+		AllowedZones:  getEnvSlice("ALLOWED_ZONES", ","),
+		CustomLabels:  getEnvMap("CUSTOM_LABELS", ",", "="),
+		LogLevel:      getEnv("LOG_LEVEL", "info"),
 	}
 
 	if err := cfg.Validate(); err != nil {
