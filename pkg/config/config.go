@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strconv"
@@ -58,6 +59,10 @@ func (c *Config) Validate() error {
 	}
 	if c.TSIGSecret == "" {
 		return fmt.Errorf("TSIG_SECRET is required")
+	}
+	// Validate that TSIG_SECRET is valid base64
+	if _, err := base64.StdEncoding.DecodeString(c.TSIGSecret); err != nil {
+		return fmt.Errorf("TSIG_SECRET must be valid base64: %w", err)
 	}
 	if len(c.AllowedZones) == 0 {
 		return fmt.Errorf("at least one zone must be configured in ALLOWED_ZONES")
