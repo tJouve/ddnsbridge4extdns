@@ -17,6 +17,20 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Extract changelog for this release
+      id: changelog
+      run: |
+        VERSION="${GITHUB_REF_NAME#v}"
+        # Extract the block between "## [VERSION]" and the next "## [" heading
+        sed -n "/^## \[${VERSION}\]/,/^## \[/{/^## \[${VERSION}\]/d;/^## \[/d;p}" CHANGELOG.md \
+          | grep -v '^\[.*\]: https\?://' \
+          | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}' \
+          > /tmp/release-notes.md
+        if [ ! -s /tmp/release-notes.md ]; then
+          echo "::error::No changelog entry found for version ${VERSION}. Add a '## [${VERSION}]' section to CHANGELOG.md."
+          exit 1
+        fi
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
@@ -50,4 +64,5 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        generate_release_notes: true
+        token: ${{ secrets.GITHUB_TOKEN }}
+        body_path: /tmp/release-notes.md

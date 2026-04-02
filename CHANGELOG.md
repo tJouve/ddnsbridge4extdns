@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-04-02
+
 ### Added
 - Initial implementation of RFC2136 DNS UPDATE server
 - TSIG authentication support (HMAC-SHA256, HMAC-SHA512, HMAC-SHA1, HMAC-MD5)
@@ -38,11 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Minimal RBAC permissions
 - Kubernetes secrets for sensitive data
 - Input validation and sanitization
-
-## [0.1.0] - 2024-XX-XX
-
-### Added
-- Initial release
 
 [Unreleased]: https://github.com/tJouve/ddnsbridge4extdns/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/tJouve/ddnsbridge4extdns/releases/tag/v0.1.0
