@@ -57,7 +57,7 @@ func main() {
 	// Create DNS server for UDP and TCP
 	// Set TsigSecret on the server - this is required for TSIG to work properly
 	// The server will handle TSIG verification automatically before calling the handler
-	serverAddr := fmt.Sprintf("%s:%d", cfg.ListenAddr, cfg.Port)
+	serverAddr := serverAddress(cfg.ListenAddr, cfg.Port)
 
 	// TSIG secret map - includes all configured keys with and without trailing dot
 	tsigSecret := cfg.TSIGSecretMap()
@@ -119,4 +119,8 @@ func main() {
 	udpServer.Shutdown()
 	tcpServer.Shutdown()
 	logrus.Println("Servers stopped")
+}
+
+func serverAddress(listenAddr string, port int) string {
+	return fmt.Sprintf("%s:%d", listenAddr, port)
 }
