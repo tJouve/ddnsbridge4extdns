@@ -9,12 +9,23 @@
 
 ### Environment Setup
 
+#### TSIG file mode (`TSIG_FILE` required)
+
 ```bash
-export TSIG_KEY="opnsense-ddns."
-export TSIG_SECRET="bXktc2VjcmV0LWtleQ=="  # Base64-encoded secret
+cat > ./tsig.yaml <<EOF
+TSIGs:
+  - key: opnsense-ddns.
+    secret: bXktc2VjcmV0LWtleQ==
+    algorithm: hmac-sha256
+  - key: laptop-ddns
+    secret: bGFwdG9wLXNlY3JldA==
+    # algorithm optional (defaults to hmac-sha256)
+EOF
+
+export TSIG_FILE="$(pwd)/tsig.yaml"
 export ALLOWED_ZONES="example.com,home.example.com"
 export NAMESPACE="default"
-export PORT="5353"  # Use non-privileged port for local testing
+export PORT="5353"
 
 # Optional: Add custom labels to DNSEndpoint resources
 export CUSTOM_LABELS="environment=production,team=infrastructure,managed-by=opnsense"
@@ -199,11 +210,17 @@ Edit `deploy/kubernetes/deployment.yaml`:
    ```
 
 2. Update TSIG credentials:
-   ```yaml
-   stringData:
-     tsig-key: "opnsense-ddns."
-     tsig-secret: "your-base64-secret"
-   ```
+    ```yaml
+    stringData:
+      tsig-file.yaml: |
+        TSIGs:
+          - key: opnsense-ddns.
+            secret: your-base64-secret
+            algorithm: hmac-sha256
+          - key: client1
+            secret: Y2xpZW50MQ==
+            # algorithm optional, defaults to hmac-sha256
+    ```
 
 3. Update allowed zones:
    ```yaml
@@ -333,8 +350,7 @@ kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/downloa
 
 # Create a sealed secret
 kubectl create secret generic ddns-tsig \
-  --from-literal=tsig-key="opnsense-ddns." \
-  --from-literal=tsig-secret="your-secret" \
+  --from-file=tsig-file.yaml=./tsig.yaml \
   --dry-run=client -o yaml | \
   kubeseal -o yaml > sealed-secret.yaml
 

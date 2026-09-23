@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2027-09-23
+
+- Add multiple TSIG authentication keys
+- TSIG configuration now requires `TSIG_FILE`; legacy `TSIG_KEY` / `TSIG_SECRET` / `TSIG_ALGORITHM` environment variables were removed.
+- Kubernetes deployment manifest now mounts TSIG YAML from secret as `TSIG_FILE`.
+- Documentation/examples updated to TSIG-file-only configuration.
+
 ## [0.1.0] - 2026-04-02
 
 ### Added
 - Initial implementation of RFC2136 DNS UPDATE server
-- TSIG authentication support (HMAC-SHA256, HMAC-SHA512, HMAC-SHA1, HMAC-MD5)
+- TSIG authentication support (HMAC-SHA256, HMAC-SHA512, HMAC-SHA1)
 - DNS UPDATE message parser for A and AAAA records
 - Kubernetes client for creating/updating/deleting DNSEndpoint resources
 - Zone-scoped security with allowed zones configuration

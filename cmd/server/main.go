@@ -38,7 +38,7 @@ func main() {
 
 	logrus.Infof("Configuration loaded: listening on %s:%d", cfg.ListenAddr, cfg.Port)
 	logrus.Debugf("Allowed zones: %v", cfg.AllowedZones)
-	logrus.Debugf("TSIG key: %s, algorithm: %s", cfg.TSIGKey, cfg.TSIGAlgorithm)
+	logrus.Debugf("TSIG loaded from file: %s (entries=%d)", cfg.TSIGFile, len(cfg.TSIGs))
 	logrus.Debugf("Kubernetes namespace: %s", cfg.Namespace)
 
 	// Initialize Kubernetes client
@@ -59,12 +59,9 @@ func main() {
 	// The server will handle TSIG verification automatically before calling the handler
 	serverAddr := fmt.Sprintf("%s:%d", cfg.ListenAddr, cfg.Port)
 
-	// TSIG secret map - include both with and without trailing dot
-	tsigSecret := map[string]string{
-		cfg.TSIGKey:       cfg.TSIGSecret,
-		cfg.TSIGKey + ".": cfg.TSIGSecret,
-	}
-	logrus.Debugf("TSIG secrets configured for keys: %s, %s.", cfg.TSIGKey, cfg.TSIGKey)
+	// TSIG secret map - includes all configured keys with and without trailing dot
+	tsigSecret := cfg.TSIGSecretMap()
+	logrus.Debugf("TSIG secrets configured for %d key variants", len(tsigSecret))
 
 	// Custom MsgAcceptFunc: accept queries, notifies and UPDATE opcodes; ignore responses; reject others
 	msgAccept := func(dh dns.Header) dns.MsgAcceptAction {

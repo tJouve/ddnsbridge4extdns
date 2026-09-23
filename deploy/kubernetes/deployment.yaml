@@ -9,11 +9,13 @@ metadata:
   name: ddns-tsig
 type: Opaque
 stringData:
-  # IMPORTANT: Replace these values with your own TSIG key and secret
+  # IMPORTANT: Replace these values with your own TSIG keys and secrets
   # Generate a secret with: tsig-keygen -a hmac-sha256 opnsense_register
-  tsig-key: "opnsense_register"
-  tsig-secret: "MzXHlvBdxhFUQUC0OAU0uGC+2nV+mMz+DtURYkmMiL0="
-  tsig-algorithm: "hmac-sha256"
+  tsig-file.yaml: |
+    TSIGs:
+      - key: opnsense_register
+        secret: MzXHlvBdxhFUQUC0OAU0uGC+2nV+mMz+DtURYkmMiL0=
+        algorithm: hmac-sha256
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -47,21 +49,8 @@ spec:
           name: dns-tcp
           protocol: TCP
         env:
-        - name: TSIG_KEY
-          valueFrom:
-            secretKeyRef:
-              name: ddns-tsig
-              key: tsig-key
-        - name: TSIG_ALGORITHM
-          valueFrom:
-            secretKeyRef:
-              name: ddns-tsig
-              key: tsig-algorithm
-        - name: TSIG_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: ddns-tsig
-              key: tsig-secret
+        - name: TSIG_FILE
+          value: /etc/ddnsbridge4extdns/tsig/tsig-file.yaml
         - name: NAMESPACE
           valueFrom:
             fieldRef:
@@ -69,6 +58,10 @@ spec:
         envFrom:
         - configMapRef:
             name: ddns-config
+        volumeMounts:
+        - name: tsig-file
+          mountPath: /etc/ddnsbridge4extdns/tsig
+          readOnly: true
         resources:
           requests:
             memory: "64Mi"
@@ -83,6 +76,13 @@ spec:
           capabilities:
             drop:
             - ALL
+      volumes:
+      - name: tsig-file
+        secret:
+          secretName: ddns-tsig
+          items:
+          - key: tsig-file.yaml
+            path: tsig-file.yaml
 ---
 apiVersion: v1
 kind: Service

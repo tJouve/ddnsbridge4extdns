@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"fmt"
+	"net"
+	"strings"
+
 	"github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/config"
@@ -11,8 +15,19 @@ import (
 // Handler handles DNS UPDATE requests
 type Handler struct {
 	config    *config.Config
-	k8sClient *k8s.Client
+	k8sClient updateApplier
 	parser    *update.Parser
+}
+
+type updateApplier interface {
+	ApplyUpdate(remote net.Addr, upd *update.DNSUpdate) (bool, error)
+}
+
+type responseTSIGSigner struct {
+	keyName    string
+	algorithm  string
+	secret     string
+	requestMAC string
 }
 
 // NewHandler creates a new DNS UPDATE handler
@@ -60,14 +75,31 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	// TSIG is present and was already verified by the DNS server
+	if err := w.TsigStatus(); err != nil {
+		logrus.Warnf("Rejected UPDATE request with invalid TSIG from %s: %v", w.RemoteAddr(), err)
+		msg.SetRcode(r, dns.RcodeRefused)
+		w.WriteMsg(msg)
+		return
+	}
+
 	requestMAC := tsigRecord.MAC
+	requestKey := tsigRecord.Hdr.Name
+	requestAlgorithm := tsigRecord.Algorithm
 	logrus.Debugf("Request authenticated with TSIG from key: %s", tsigRecord.Hdr.Name)
+
+	responseSigner, err := h.prepareResponseTSIGSigner(requestKey, requestAlgorithm, requestMAC)
+	if err != nil {
+		logrus.Errorf("Failed to prepare TSIG response signing for key %q: %v", requestKey, err)
+		msg.SetRcode(r, dns.RcodeServerFailure)
+		w.WriteMsg(msg)
+		return
+	}
 
 	// Validate zone
 	if len(r.Question) == 0 {
 		logrus.Warnf("UPDATE message has no zone section from %s", w.RemoteAddr())
 		msg.SetRcode(r, dns.RcodeFormatError)
-		h.writeResponse(w, msg, requestMAC)
+		h.writeResponse(w, msg, responseSigner)
 		return
 	}
 
@@ -75,7 +107,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	if !h.config.IsZoneAllowed(zone) {
 		logrus.Warnf("Zone %s not allowed from %s", zone, w.RemoteAddr())
 		msg.SetRcode(r, dns.RcodeRefused)
-		h.writeResponse(w, msg, requestMAC)
+		h.writeResponse(w, msg, responseSigner)
 		return
 	}
 
@@ -84,7 +116,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	if err != nil {
 		logrus.Errorf("Failed to parse UPDATE from %s: %v", w.RemoteAddr(), err)
 		msg.SetRcode(r, dns.RcodeFormatError)
-		h.writeResponse(w, msg, requestMAC)
+		h.writeResponse(w, msg, responseSigner)
 		return
 	}
 
@@ -95,7 +127,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		if err != nil {
 			logrus.Errorf("Failed to apply update to Kubernetes: %v", err)
 			msg.SetRcode(r, dns.RcodeServerFailure)
-			h.writeResponse(w, msg, requestMAC)
+			h.writeResponse(w, msg, responseSigner)
 			return
 		}
 		if updated {
@@ -105,47 +137,94 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	// Success response
 	msg.SetRcode(r, dns.RcodeSuccess)
-	h.writeResponse(w, msg, requestMAC)
+	h.writeResponse(w, msg, responseSigner)
 }
 
 // writeResponse writes a DNS response with TSIG signing if the request had TSIG
-func (h *Handler) writeResponse(w dns.ResponseWriter, msg *dns.Msg, requestMAC string) {
-	// If the request had TSIG, we need to sign the response
-	if requestMAC != "" {
-		// Add TSIG to the response
-		// The key name should end with a dot (FQDN)
-		keyName := h.config.TSIGKey
-		if keyName[len(keyName)-1] != '.' {
-			keyName = keyName + "."
-		}
-		algorithm := dns.HmacSHA256
-		switch h.config.TSIGAlgorithm {
-		case "hmac-sha1":
-			algorithm = dns.HmacSHA1
-		case "hmac-sha256":
-			algorithm = dns.HmacSHA256
-		case "hmac-sha512":
-			algorithm = dns.HmacSHA512
-		case "hmac-md5":
-			algorithm = dns.HmacMD5
-		}
-
-		// Set TSIG parameters on the message
-		msg.SetTsig(keyName, algorithm, 300, 0)
-
-		// Sign the message using the request MAC for chaining
-		// dns.TsigGenerate returns the packed signed message
-		buf, _, err := dns.TsigGenerate(msg, h.config.TSIGSecret, requestMAC, false)
-		if err != nil {
-			logrus.Errorf("Failed to generate TSIG for response: %v", err)
-			w.WriteMsg(msg)
-			return
-		}
-
-		// Write the signed response directly
-		w.Write(buf)
+func (h *Handler) writeResponse(w dns.ResponseWriter, msg *dns.Msg, signer *responseTSIGSigner) {
+	if signer == nil {
+		w.WriteMsg(msg)
 		return
 	}
 
-	w.WriteMsg(msg)
+	buf, err := signer.sign(msg)
+	if err != nil {
+		logrus.Errorf("Failed to generate TSIG for response: %v", err)
+		w.WriteMsg(msg)
+		return
+	}
+
+	w.Write(buf)
+}
+
+func (h *Handler) prepareResponseTSIGSigner(requestKey, requestAlgorithm, requestMAC string) (*responseTSIGSigner, error) {
+	if requestMAC == "" {
+		return nil, nil
+	}
+
+	keyName, tsigSecret, ok := h.resolveResponseTSIG(requestKey)
+	if !ok {
+		return nil, fmt.Errorf("request key %q not configured", requestKey)
+	}
+
+	algorithm := dns.CanonicalName(strings.TrimSpace(requestAlgorithm))
+	if algorithm == "" {
+		return nil, fmt.Errorf("request algorithm empty for key %q", requestKey)
+	}
+
+	signer := &responseTSIGSigner{
+		keyName:    keyName,
+		algorithm:  algorithm,
+		secret:     tsigSecret,
+		requestMAC: requestMAC,
+	}
+
+	if err := signer.preflight(); err != nil {
+		return nil, err
+	}
+
+	return signer, nil
+}
+
+func (s *responseTSIGSigner) preflight() error {
+	probe := new(dns.Msg)
+	probe.SetTsig(s.keyName, s.algorithm, 300, 0)
+
+	if _, _, err := dns.TsigGenerate(probe, s.secret, s.requestMAC, false); err != nil {
+		return fmt.Errorf("response TSIG preflight failed: %w", err)
+	}
+
+	return nil
+}
+
+func (s *responseTSIGSigner) sign(msg *dns.Msg) ([]byte, error) {
+	msg.SetTsig(s.keyName, s.algorithm, 300, 0)
+	buf, _, err := dns.TsigGenerate(msg, s.secret, s.requestMAC, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf, nil
+}
+
+func (h *Handler) resolveResponseTSIG(requestKey string) (keyName, secret string, ok bool) {
+	requestKey = strings.TrimSpace(requestKey)
+	if requestKey == "" {
+		return "", "", false
+	}
+
+	ts, found := h.config.LookupTSIG(requestKey)
+	if !found {
+		return "", "", false
+	}
+
+	return ensureTrailingDot(requestKey), ts.Secret, true
+}
+
+func ensureTrailingDot(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.HasSuffix(name, ".") {
+		return name
+	}
+	return name + "."
 }
