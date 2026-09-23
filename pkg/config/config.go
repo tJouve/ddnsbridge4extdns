@@ -4,10 +4,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
-
-	"go.yaml.in/yaml/v2"
 )
 
 const defaultTSIGAlgorithm = "hmac-sha256"
@@ -18,15 +17,17 @@ var supportedTSIGAlgorithms = map[string]struct{}{
 	"hmac-sha512": {},
 }
 
+var (
+	tsigKeyBlockRE  = regexp.MustCompile(`(?is)key\s+"([^"]*)"\s*\{(.*?)\}\s*;`)
+	tsigAlgorithmRE = regexp.MustCompile(`(?is)\balgorithm\s+([a-z0-9-]+)\s*;`)
+	tsigSecretRE    = regexp.MustCompile(`(?is)\bsecret\s+"([^"]*)"\s*;`)
+)
+
 // TSIGEntry represents one TSIG key configuration
 type TSIGEntry struct {
-	Key       string `yaml:"key"`
-	Secret    string `yaml:"secret"`
-	Algorithm string `yaml:"algorithm"`
-}
-
-type tsigFileConfig struct {
-	TSIGs []TSIGEntry `yaml:"TSIGs"`
+	Key       string
+	Secret    string
+	Algorithm string
 }
 
 // Config holds the server configuration
@@ -238,20 +239,63 @@ func loadTSIGsFromFile(filePath string) ([]TSIGEntry, error) {
 		return nil, err
 	}
 
-	if strings.TrimSpace(string(content)) == "" {
+	raw := string(content)
+	if strings.TrimSpace(raw) == "" {
 		return nil, fmt.Errorf("file is empty")
 	}
 
-	var fileCfg tsigFileConfig
-	if err := yaml.Unmarshal(content, &fileCfg); err != nil {
-		return nil, fmt.Errorf("invalid YAML: %w", err)
+	blocks := tsigKeyBlockRE.FindAllStringSubmatch(raw, -1)
+	if len(blocks) == 0 {
+		return nil, fmt.Errorf("no TSIG key blocks found")
 	}
 
-	if len(fileCfg.TSIGs) == 0 {
-		return nil, fmt.Errorf("TSIGs must contain at least one entry")
+	entriesByKey := make(map[string]TSIGEntry, len(blocks))
+	order := make([]string, 0, len(blocks))
+
+	for i, block := range blocks {
+		key := strings.TrimSpace(block[1])
+		body := block[2]
+
+		if key == "" {
+			return nil, fmt.Errorf("key is required in key block #%d", i+1)
+		}
+
+		algorithmMatch := tsigAlgorithmRE.FindStringSubmatch(body)
+		if len(algorithmMatch) < 2 || strings.TrimSpace(algorithmMatch[1]) == "" {
+			return nil, fmt.Errorf("algorithm is required in key block #%d", i+1)
+		}
+
+		secretMatch := tsigSecretRE.FindStringSubmatch(body)
+		if len(secretMatch) < 2 || strings.TrimSpace(secretMatch[1]) == "" {
+			return nil, fmt.Errorf("secret is required in key block #%d", i+1)
+		}
+
+		entry := TSIGEntry{
+			Key:       key,
+			Algorithm: strings.ToLower(strings.TrimSpace(algorithmMatch[1])),
+			Secret:    strings.TrimSpace(secretMatch[1]),
+		}
+
+		normalizedKey := normalizeTSIGKeyName(entry.Key)
+		if _, exists := entriesByKey[normalizedKey]; exists {
+			for idx, orderedKey := range order {
+				if orderedKey == normalizedKey {
+					order = append(order[:idx], order[idx+1:]...)
+					break
+				}
+			}
+		}
+
+		entriesByKey[normalizedKey] = entry
+		order = append(order, normalizedKey)
 	}
 
-	return fileCfg.TSIGs, nil
+	entries := make([]TSIGEntry, 0, len(order))
+	for _, normalizedKey := range order {
+		entries = append(entries, entriesByKey[normalizedKey])
+	}
+
+	return entries, nil
 }
 
 func normalizeTSIGKeyName(keyName string) string {
@@ -269,16 +313,16 @@ func addTSIGKeyVariants(m map[string]string, key, secret string) {
 	}
 
 	m[key] = secret
-	if strings.HasSuffix(key, ".") {
-		m[strings.TrimSuffix(key, ".")] = secret
+	if before, ok := strings.CutSuffix(key, "."); ok {
+		m[before] = secret
 	} else {
 		m[key+"."] = secret
 	}
 
 	canonical := strings.ToLower(key)
 	m[canonical] = secret
-	if strings.HasSuffix(canonical, ".") {
-		m[strings.TrimSuffix(canonical, ".")] = secret
+	if before, ok := strings.CutSuffix(canonical, "."); ok {
+		m[before] = secret
 	} else {
 		m[canonical+"."] = secret
 	}

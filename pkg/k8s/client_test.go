@@ -5,55 +5,8 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/tJouve/ddnsbridge4extdns/pkg/update"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
-
-func TestSanitizeResourceName(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"test.example.com.", "test-example-com"},
-		{"test.example.com", "test-example-com"},
-		{"subdomain.test.example.com", "subdomain-test-example-com"},
-		{"test_host.example.com", "test-host-example-com"},
-		{"123.example.com", "123-example-com"}, // starts with number - but we allow it
-		{"@", ""},                              // empty after sanitization
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := sanitizeResourceName(tt.input)
-			if result != tt.expected {
-				t.Errorf("sanitizeResourceName(%s) = %s, want %s", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestSanitizeLabel(t *testing.T) {
-	tests := []struct {
-		input       string
-		expectedLen int
-	}{
-		{"example.com.", 11},
-		{"example.com", 11},
-		{"test.org", 8},
-		{"very-long-domain-name-that-exceeds-the-kubernetes-label-limit.com", 63}, // truncated to 63
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := sanitizeLabel(tt.input)
-			if len(result) != tt.expectedLen {
-				t.Errorf("sanitizeLabel(%s) length = %d, want %d (result: %s)", tt.input, len(result), tt.expectedLen, result)
-			}
-			// Check length constraint
-			if len(result) > 63 {
-				t.Errorf("sanitizeLabel(%s) returned string longer than 63 characters: %d", tt.input, len(result))
-			}
-		})
-	}
-}
 
 func TestIsAlphanumericLower(t *testing.T) {
 	tests := []struct {
@@ -82,23 +35,28 @@ func TestIsAlphanumericLower(t *testing.T) {
 	}
 }
 
-func TestDNSNameToK8sName(t *testing.T) {
+func TestNameToK8sName(t *testing.T) {
 	tests := []struct {
+		name     string
 		input    string
+		size     int
 		expected string
 	}{
-		{"test.example.com", "test-example-com"},
-		{"test_host", "test-host"},
-		{"test-host", "test-host"},
-		{"test.host_name", "test-host-name"},
-		{"192.168.1.1", "192-168-1-1"},
+		{name: "resource hostname", input: "test.example.com.", size: 253, expected: "test-example-com"},
+		{name: "resource hostname with underscore", input: "test_host.example.com", size: 253, expected: "test-host-example-com"},
+		{name: "resource hostname with ip", input: "192.168.1.1", size: 253, expected: "192-168-1-1"},
+		{name: "resource name with invalid leading char", input: "@", size: 253, expected: ""},
+		{name: "label hostname", input: "example.com.", size: 63, expected: "example-com"},
+		{name: "label value keeps underscore", input: "opnsense_pallas.", size: 63, expected: "opnsense_pallas"},
+		{name: "label trims invalid edges", input: ".-key-.", size: 63, expected: "dns-key"},
+		{name: "label truncates to 63 chars", input: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789extra", size: 63, expected: "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz0123456789e"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := dnsNameToK8sName(tt.input)
+		t.Run(tt.name, func(t *testing.T) {
+			result := nameToK8sName(tt.input, tt.size)
 			if result != tt.expected {
-				t.Errorf("dnsNameToK8sName(%s) = %s, want %s", tt.input, result, tt.expected)
+				t.Fatalf("nameToK8sName(%q, %d) = %q, want %q", tt.input, tt.size, result, tt.expected)
 			}
 		})
 	}
@@ -112,14 +70,14 @@ func TestUpdateGetHostname(t *testing.T) {
 	}
 
 	hostname := upd.GetHostname()
-	sanitized := sanitizeResourceName(hostname)
+	sanitized := nameToK8sName(hostname, 253)
 
 	if hostname != "test" {
 		t.Errorf("GetHostname() = %s, want 'test'", hostname)
 	}
 
 	if sanitized != "test" {
-		t.Errorf("sanitizeResourceName(%s) = %s, want 'test'", hostname, sanitized)
+		t.Errorf("nameToK8sName(%s) = %s, want 'test'", hostname, sanitized)
 	}
 }
 
@@ -148,5 +106,62 @@ func TestUpdateTypeHandling(t *testing.T) {
 				t.Errorf("Update type = %v, want %v", upd.Type, tt.updateType)
 			}
 		})
+	}
+}
+
+func TestSanitizeTSIGKeyLabelValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "trim", input: "  client1.  ", expected: "client1"},
+		{name: "preserve valid underscore", input: "opnsense_pallas.", expected: "opnsense_pallas"},
+		{name: "trim non-alnum edges", input: ".-key-.", expected: "dns-key"},
+		{name: "truncate to 63", input: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789extra", expected: "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz0123456789e"},
+		{name: "empty", input: "   ", expected: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := nameToK8sName(tt.input, 63)
+			if got != tt.expected {
+				t.Fatalf("nameToK8sName(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCompareEndpointDetectsTSIGLabelChange(t *testing.T) {
+	existing := &unstructured.Unstructured{Object: map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"labels": map[string]interface{}{
+				"app.kubernetes.io/managed-by": "ddnsbridge4extdns",
+				"ddnsbridge4extdns/key":        "client0",
+			},
+		},
+		"spec": map[string]interface{}{
+			"endpoints": []interface{}{"same"},
+		},
+	}}
+
+	desired := &unstructured.Unstructured{Object: map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"labels": map[string]interface{}{
+				"app.kubernetes.io/managed-by": "ddnsbridge4extdns",
+				"ddnsbridge4extdns/key":        "client1",
+			},
+		},
+		"spec": map[string]interface{}{
+			"endpoints": []interface{}{"same"},
+		},
+	}}
+
+	labelsMatch, specMatch, _, _ := compareEndpoint(existing, desired)
+	if labelsMatch {
+		t.Fatalf("expected labels mismatch when TSIG key label changes")
+	}
+	if !specMatch {
+		t.Fatalf("expected spec to match")
 	}
 }

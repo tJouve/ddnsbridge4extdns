@@ -20,7 +20,7 @@ type Handler struct {
 }
 
 type updateApplier interface {
-	ApplyUpdate(remote net.Addr, upd *update.DNSUpdate) (bool, error)
+	ApplyUpdate(remote net.Addr, tsigKey string, upd *update.DNSUpdate) (bool, error)
 }
 
 type responseTSIGSigner struct {
@@ -85,7 +85,8 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	requestMAC := tsigRecord.MAC
 	requestKey := tsigRecord.Hdr.Name
 	requestAlgorithm := tsigRecord.Algorithm
-	logrus.Debugf("Request authenticated with TSIG from key: %s", tsigRecord.Hdr.Name)
+	logrus.Infof("Authenticated DNS UPDATE request from %s with TSIG key %s", w.RemoteAddr(), requestKey)
+	logrus.Debugf("Request authenticated with TSIG key %s using algorithm %s", requestKey, requestAlgorithm)
 
 	responseSigner, err := h.prepareResponseTSIGSigner(requestKey, requestAlgorithm, requestMAC)
 	if err != nil {
@@ -123,7 +124,7 @@ func (h *Handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	// Apply updates to Kubernetes
 	for _, upd := range updates {
 		logrus.Debugf("Processing update from %s: %s", w.RemoteAddr(), upd.String())
-		updated, err := h.k8sClient.ApplyUpdate(w.RemoteAddr(), upd)
+		updated, err := h.k8sClient.ApplyUpdate(w.RemoteAddr(), requestKey, upd)
 		if err != nil {
 			logrus.Errorf("Failed to apply update to Kubernetes: %v", err)
 			msg.SetRcode(r, dns.RcodeServerFailure)

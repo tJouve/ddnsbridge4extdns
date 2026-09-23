@@ -11,13 +11,19 @@ import (
 )
 
 type fakeUpdateApplier struct {
-	applyCount int
-	updated    bool
-	err        error
+	applyCount    int
+	updated       bool
+	err           error
+	lastRemote    net.Addr
+	lastTSIGKey   string
+	lastDNSUpdate *update.DNSUpdate
 }
 
-func (f *fakeUpdateApplier) ApplyUpdate(_ net.Addr, _ *update.DNSUpdate) (bool, error) {
+func (f *fakeUpdateApplier) ApplyUpdate(remote net.Addr, tsigKey string, upd *update.DNSUpdate) (bool, error) {
 	f.applyCount++
+	f.lastRemote = remote
+	f.lastTSIGKey = tsigKey
+	f.lastDNSUpdate = upd
 	return f.updated, f.err
 }
 
@@ -191,6 +197,9 @@ func TestServeDNSValidPathMutatesAndSignsResponse(t *testing.T) {
 
 	if fakeK8s.applyCount != 1 {
 		t.Fatalf("expected one Kubernetes mutation, got %d", fakeK8s.applyCount)
+	}
+	if fakeK8s.lastTSIGKey != "client1." {
+		t.Fatalf("expected propagated TSIG key client1., got %q", fakeK8s.lastTSIGKey)
 	}
 	if w.writeRawCount != 1 {
 		t.Fatalf("expected signed raw response write, got %d", w.writeRawCount)

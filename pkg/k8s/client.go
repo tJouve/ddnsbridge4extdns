@@ -60,12 +60,12 @@ func NewClient(namespace string, customLabels map[string]string) (*Client, error
 }
 
 // ApplyUpdate applies a DNS update to Kubernetes as a DNSEndpoint resource
-func (c *Client) ApplyUpdate(client net.Addr, upd *update.DNSUpdate) (changed bool, err error) {
+func (c *Client) ApplyUpdate(client net.Addr, tsigKey string, upd *update.DNSUpdate) (changed bool, err error) {
 	ctx := context.Background()
 
 	switch upd.Type {
 	case update.UpdateTypeCreate, update.UpdateTypeUpdate:
-		return c.createOrUpdateEndpoint(ctx, client, upd)
+		return c.createOrUpdateEndpoint(ctx, client, tsigKey, upd)
 	case update.UpdateTypeDelete:
 		return true, c.deleteEndpoint(ctx, upd)
 	default:
@@ -74,9 +74,9 @@ func (c *Client) ApplyUpdate(client net.Addr, upd *update.DNSUpdate) (changed bo
 }
 
 // createOrUpdateEndpoint creates or updates a DNSEndpoint resource
-func (c *Client) createOrUpdateEndpoint(ctx context.Context, client net.Addr, upd *update.DNSUpdate) (changed bool, err error) {
+func (c *Client) createOrUpdateEndpoint(ctx context.Context, client net.Addr, tsigKey string, upd *update.DNSUpdate) (changed bool, err error) {
 	hostname := upd.GetHostname()
-	resourceName := sanitizeResourceName(hostname)
+	resourceName := nameToK8sName(hostname, 253)
 
 	recordType := "A"
 	if upd.RecordType == 28 { // dns.TypeAAAA
@@ -86,8 +86,9 @@ func (c *Client) createOrUpdateEndpoint(ctx context.Context, client net.Addr, up
 	// Build labels map with default labels
 	labels := map[string]interface{}{
 		"app.kubernetes.io/managed-by": "ddnsbridge4extdns",
-		"ddnsbridge4extdns/zone":       sanitizeLabel(upd.Zone),
-		"ddnsbridge4extdns/ask-by":     sanitizeLabel(strings.Split(client.String(), ":")[0]),
+		"ddnsbridge4extdns/zone":       nameToK8sName(upd.Zone, 63),
+		"ddnsbridge4extdns/ask-by":     nameToK8sName(strings.Split(client.String(), ":")[0], 63),
+		"ddnsbridge4extdns/key":        nameToK8sName(tsigKey, 63),
 	}
 
 	// Add custom labels (user-defined labels take precedence)
@@ -154,7 +155,7 @@ func (c *Client) createOrUpdateEndpoint(ctx context.Context, client net.Addr, up
 // deleteEndpoint deletes a DNSEndpoint resource
 func (c *Client) deleteEndpoint(ctx context.Context, upd *update.DNSUpdate) error {
 	hostname := upd.GetHostname()
-	resourceName := sanitizeResourceName(hostname)
+	resourceName := nameToK8sName(hostname, 253)
 
 	err := c.dynamicClient.Resource(c.gvr).Namespace(c.namespace).Delete(ctx, resourceName, metav1.DeleteOptions{})
 	if err != nil {
@@ -190,57 +191,59 @@ func getKubeConfig() (*rest.Config, error) {
 	return nil, fmt.Errorf("no kubeconfig found (in-cluster, KUBECONFIG); last error: %w", cfgErr)
 }
 
-// sanitizeResourceName converts a hostname to a valid Kubernetes resource name
-func sanitizeResourceName(hostname string) string {
-	// Remove trailing dots and replace dots with hyphens
-	name := hostname
-	if len(name) > 0 && name[len(name)-1] == '.' {
-		name = name[:len(name)-1]
-	}
-	// Replace dots and other invalid characters with hyphens
-	name = dnsNameToK8sName(name)
-
-	// Ensure it starts with alphanumeric
-	if len(name) > 0 && !isAlphanumericLower(rune(name[0])) {
-		name = "dns-" + name
+// nameToK8sName converts to a valid Kubernetes name or label value.
+func nameToK8sName(name string, size int) string {
+	if size <= 0 {
+		return ""
 	}
 
-	// Truncate to 253 characters (Kubernetes limit)
-	if len(name) > 253 {
-		name = name[:253]
+	name = strings.TrimSpace(strings.ToLower(name))
+	if name == "" {
+		return ""
 	}
 
-	return name
-}
+	allowUnderscore := size <= 63
+	var b strings.Builder
+	lastWasSeparator := true
 
-// sanitizeLabel converts a zone name to a valid Kubernetes label value
-func sanitizeLabel(zone string) string {
-	label := zone
-	if len(label) > 0 && label[len(label)-1] == '.' {
-		label = label[:len(label)-1]
-	}
-	label = dnsNameToK8sName(label)
-
-	// Truncate to 63 characters (Kubernetes label limit)
-	if len(label) > 63 {
-		label = label[:63]
-	}
-
-	return label
-}
-
-// dnsNameToK8sName converts a DNS name to a valid Kubernetes name
-func dnsNameToK8sName(name string) string {
-	name = strings.ToLower(name)
-	result := make([]rune, 0, len(name))
 	for _, r := range name {
-		if isAlphanumericLower(r) || r == '-' {
-			result = append(result, r)
-		} else if r == '.' || r == '_' || r == ':' {
-			result = append(result, '-')
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+			lastWasSeparator = false
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastWasSeparator = false
+		case allowUnderscore && r == '_':
+			b.WriteRune(r)
+			lastWasSeparator = false
+		default:
+			if b.Len() > 0 && !lastWasSeparator {
+				b.WriteRune('-')
+				lastWasSeparator = true
+			}
 		}
 	}
-	return string(result)
+
+	result := strings.Trim(b.String(), "-_.")
+	if result == "" {
+		return ""
+	}
+
+	startsWithInvalid := len(name) > 0 && !isAlphanumericLower(rune(name[0])) && !(allowUnderscore && rune(name[0]) == '_')
+	if startsWithInvalid {
+		result = "dns-" + result
+	}
+
+	if len(result) > size {
+		result = result[:size]
+		result = strings.TrimRight(result, "-_.")
+	}
+	if result == "" {
+		return ""
+	}
+
+	return result
 }
 
 // isAlphanumericLower checks if a rune is alphanumeric

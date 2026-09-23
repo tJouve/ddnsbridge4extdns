@@ -5,7 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.3] - 2027-09-23
+- Changed `TSIG_FILE` format from YAML (`TSIGs:` list) to raw BIND `tsig-keygen` key blocks:
+  `key "name" { algorithm hmac-shaXXX; secret "base64"; };`
+- `TSIG_FILE` now supports multiple key blocks and resolves duplicate normalized keys with last-block-wins behavior.
+- Kubernetes deployment/docs/examples updated to use `tsig-file.conf` with raw `tsig-keygen` output.
+
 ## [0.2.2] - 2027-09-23
 - Ci updates
 

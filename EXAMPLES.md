@@ -12,17 +12,18 @@
 #### TSIG file mode (`TSIG_FILE` required)
 
 ```bash
-cat > ./tsig.yaml <<EOF
-TSIGs:
-  - key: opnsense-ddns.
-    secret: bXktc2VjcmV0LWtleQ==
-    algorithm: hmac-sha256
-  - key: laptop-ddns
-    secret: bGFwdG9wLXNlY3JldA==
-    # algorithm optional (defaults to hmac-sha256)
+cat > ./tsig-file.conf <<EOF
+key "opnsense-ddns." {
+  algorithm hmac-sha256;
+  secret "bXktc2VjcmV0LWtleQ==";
+};
+key "laptop-ddns" {
+  algorithm hmac-sha512;
+  secret "bGFwdG9wLXNlY3JldA==";
+};
 EOF
 
-export TSIG_FILE="$(pwd)/tsig.yaml"
+export TSIG_FILE="$(pwd)/tsig-file.conf"
 export ALLOWED_ZONES="example.com,home.example.com"
 export NAMESPACE="default"
 export PORT="5353"
@@ -31,11 +32,11 @@ export PORT="5353"
 export CUSTOM_LABELS="environment=production,team=infrastructure,managed-by=opnsense"
 ```
 
-### Generate TSIG Secret
+### Generate TSIG Key Block
 
 ```bash
-# Generate a random secret
-openssl rand -base64 32
+# Raw BIND format for TSIG_FILE
+docker run --rm alpine:3.20 sh -c "apk add --no-cache bind-tools >/dev/null && tsig-keygen -a hmac-sha512 opnsense-ddns."
 ```
 
 ### Run the Server
@@ -212,14 +213,15 @@ Edit `deploy/kubernetes/deployment.yaml`:
 2. Update TSIG credentials:
     ```yaml
     stringData:
-      tsig-file.yaml: |
-        TSIGs:
-          - key: opnsense-ddns.
-            secret: your-base64-secret
-            algorithm: hmac-sha256
-          - key: client1
-            secret: Y2xpZW50MQ==
-            # algorithm optional, defaults to hmac-sha256
+      tsig-file.conf: |
+        key "opnsense-ddns." {
+          algorithm hmac-sha256;
+          secret "your-base64-secret";
+        };
+        key "client1" {
+          algorithm hmac-sha512;
+          secret "Y2xpZW50MQ==";
+        };
     ```
 
 3. Update allowed zones:
@@ -350,7 +352,7 @@ kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/downloa
 
 # Create a sealed secret
 kubectl create secret generic ddns-tsig \
-  --from-file=tsig-file.yaml=./tsig.yaml \
+  --from-file=tsig-file.conf=./tsig-file.conf \
   --dry-run=client -o yaml | \
   kubeseal -o yaml > sealed-secret.yaml
 

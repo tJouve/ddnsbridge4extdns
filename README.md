@@ -54,26 +54,27 @@ docker build -t ddnsbridge4extdns:latest .
 
 ### 2. Configure TSIG Credentials
 
-`ddnsbridge4extdns` requires TSIG configuration from a YAML file referenced by `TSIG_FILE`.
+`ddnsbridge4extdns` requires TSIG configuration from a BIND-style key file (raw `tsig-keygen` output) referenced by `TSIG_FILE`.
 
 Edit `deploy/kubernetes/deployment.yaml` and update the TSIG secret:
 
 ```yaml
 stringData:
-  tsig-file.yaml: |
-    TSIGs:
-      - key: client1
-        secret: Y2xpZW50MQ==
-        algorithm: hmac-sha256
-      - key: client2
-        secret: Y2xpZW50Mg==
-        # algorithm optional, defaults to hmac-sha256
+  tsig-file.conf: |
+    key "client1" {
+      algorithm hmac-sha512;
+      secret "Y2xpZW50MQ==";
+    };
+    key "client2" {
+      algorithm hmac-sha256;
+      secret "Y2xpZW50Mg==";
+    };
 ```
 
-Generate a TSIG secret:
+Generate a TSIG key block:
 ```bash
-# Generate a random secret
-openssl rand -base64 32
+# Requires bind tools; outputs a ready-to-use key block
+docker run --rm alpine:3.20 sh -c "apk add --no-cache bind-tools >/dev/null && tsig-keygen -a hmac-sha512 KEY_NAME"
 ```
 
 ### 3. Configure Allowed Zones
@@ -107,7 +108,7 @@ Configuration is done via environment variables:
 |----------|-------------|---------|----------|
 | `LISTEN_ADDR` | Listen address | `0.0.0.0` | No |
 | `PORT` | Listen port | `53` | No |
-| `TSIG_FILE` | Path to TSIG YAML file (`TSIGs` list) | - | **Yes** |
+| `TSIG_FILE` | Path to TSIG BIND key file (`key "name" { algorithm ...; secret "..."; };`) | - | **Yes** |
 | `NAMESPACE` | Target Kubernetes namespace for DNSEndpoints | `default` | No |
 | `ALLOWED_ZONES` | Comma-separated list of allowed zones | - | **Yes** |
 | `CUSTOM_LABELS` | Custom labels for DNSEndpoint resources (format: `key1=value1,key2=value2`) | - | No |
@@ -115,24 +116,27 @@ Configuration is done via environment variables:
 
 ### TSIG Configuration
 
-Set `TSIG_FILE` to a YAML file path:
+Set `TSIG_FILE` to a BIND key file path (raw `tsig-keygen` format):
 
 ```yaml
-TSIGs:
-  - key: client1
-    secret: Y2xpZW50MQ==
-    algorithm: hmac-sha256
-  - key: client2
-    secret: Y2xpZW50Mg==
-    # algorithm optional, defaults to hmac-sha256
+key "client1" {
+  algorithm hmac-sha512;
+  secret "Y2xpZW50MQ==";
+};
+
+key "client2" {
+  algorithm hmac-sha256;
+  secret "Y2xpZW50Mg==";
+};
 ```
 
 Validation rules:
 
-- `TSIGs` must contain at least one entry
-- each `key` must be non-empty
-- each `secret` must be non-empty and valid base64
+- file must contain at least one `key "..." { ... };` block
+- each block must include non-empty `key`, `algorithm`, and quoted `secret`
+- `secret` must be valid base64
 - supported algorithms: `hmac-sha1`, `hmac-sha256`, `hmac-sha512`
+- if the same key appears multiple times (case-insensitive, trailing dot ignored), the last block wins
 
 ### Supported Log Levels
 
@@ -155,8 +159,8 @@ Validation rules:
    - **Service**: RFC2136
    - **Server**: `<ddnsbridge4extdns-service-external-ip>`
    - **Zone**: Your zone (e.g., `example.com`)
-   - **Key name**: Your TSIG key name (matches a `TSIG_FILE` entry `key`)
-   - **Key**: Your TSIG secret (matches a `TSIG_FILE` entry `secret`)
+   - **Key name**: Your TSIG key name (matches `key "..."` in `TSIG_FILE`)
+   - **Key**: Your TSIG secret (matches `secret "..."` in `TSIG_FILE`)
    - **Key algorithm**: HMAC-SHA256 (or your chosen algorithm)
    - **Hostname**: The hostname to update (e.g., `router.example.com`)
 
@@ -249,7 +253,7 @@ cd ddnsbridge4extdns
 go build -o ddnsbridge4extdns ./cmd/server
 
 # Run locally (requires kubeconfig)
-export TSIG_FILE="/path/to/tsig.yaml"
+export TSIG_FILE="/path/to/tsig-file.conf"
 export ALLOWED_ZONES="example.com"
 ./ddnsbridge4extdns
 ```

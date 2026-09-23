@@ -10,12 +10,12 @@ metadata:
 type: Opaque
 stringData:
   # IMPORTANT: Replace these values with your own TSIG keys and secrets
-  # Generate a secret with: tsig-keygen -a hmac-sha256 opnsense_register
-  tsig-file.yaml: |
-    TSIGs:
-      - key: opnsense_register
-        secret: MzXHlvBdxhFUQUC0OAU0uGC+2nV+mMz+DtURYkmMiL0=
-        algorithm: hmac-sha256
+  # Generate a key block with: tsig-keygen -a hmac-sha512 opnsense_register
+  tsig-file.conf: |
+    key "opnsense_register" {
+      algorithm hmac-sha512;
+      secret "MzXHlvBdxhFUQUC0OAU0uGC+2nV+mMz+DtURYkmMiL0=";
+    };
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -50,7 +50,7 @@ spec:
           protocol: TCP
         env:
         - name: TSIG_FILE
-          value: /etc/ddnsbridge4extdns/tsig/tsig-file.yaml
+          value: /etc/ddnsbridge4extdns/tsig/tsig-file.conf
         - name: NAMESPACE
           valueFrom:
             fieldRef:
@@ -81,8 +81,8 @@ spec:
         secret:
           secretName: ddns-tsig
           items:
-          - key: tsig-file.yaml
-            path: tsig-file.yaml
+          - key: tsig-file.conf
+            path: tsig-file.conf
 ---
 apiVersion: v1
 kind: Service
